@@ -31,9 +31,8 @@ export function PricingCard({
 }: PricingCardProps) {
     return (
         <div
-            className={`relative rounded-lg border p-6 shadow-sm ${
-                isPopular ? 'border-primary bg-primary/5 shadow-md' : 'bg-background'
-            }`}
+            className={`relative rounded-lg border p-6 shadow-sm ${isPopular ? 'border-primary bg-primary/5 shadow-md' : 'bg-background'
+                }`}
             data-testid={testId}
         >
             {isPopular && (
