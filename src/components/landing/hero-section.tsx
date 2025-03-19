@@ -49,7 +49,7 @@ export function HeroSection() {
                         className="text-xs text-muted-foreground pt-3"
                         data-testid="landing-hero-promo"
                     >
-                        No credit card required. Start with 3 free practice interviews.
+                        No credit card required. Start with free practice interviews today.
                     </p>
                 </div>
             </div>

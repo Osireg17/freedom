@@ -1,32 +1,92 @@
-import type React from "react"
-import { Play } from "lucide-react"
-import { Card, CardContent } from "@/components/ui/card"
+// src/components/features/feature-card.tsx
+"use client";
+
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Plus, Minus } from 'lucide-react';
+import { useState } from 'react';
+import { cn } from '@/lib/utils';
 
 interface FeatureCardProps {
-    icon: React.ReactNode
-    title: string
-    description: string
-    testId: string
+    icon: React.ReactNode;
+    title: string;
+    description: string;
+    details: string[];
+    isNew?: boolean;
+    testId: string;
 }
 
-export function FeatureCard({ icon, title, description, testId }: FeatureCardProps) {
+export function FeatureCard({
+    icon,
+    title,
+    description,
+    details,
+    isNew = false,
+    testId
+}: FeatureCardProps) {
+    const [isExpanded, setIsExpanded] = useState(false);
+
     return (
-        <Card className="h-full" data-testid={testId}>
-            <CardContent className="flex flex-col gap-4 pt-6">
-                <div className="p-2 w-fit rounded-full bg-primary/10">{icon}</div>
-                <div>
-                    <h3 className="text-xl font-semibold mb-2">{title}</h3>
-                    <p className="text-muted-foreground">{description}</p>
-                </div>
+        <Card
+            className={cn(
+                "relative overflow-hidden transition-all duration-300",
+                isExpanded ? "shadow-md" : "shadow-sm"
+            )}
+            data-testid={testId}
+        >
+            {isNew && (
                 <div
-                    className="mt-4 aspect-video bg-muted/50 rounded-lg flex flex-col items-center justify-center border border-dashed border-muted-foreground/50"
-                    data-testid={`${testId}-video-placeholder`}
+                    className="absolute top-3 right-3 bg-primary text-primary-foreground px-2 py-1 text-xs font-medium rounded-full"
+                    data-testid={`${testId}-new-badge`}
+                    aria-label="New feature"
                 >
-                    <Play className="h-10 w-10 text-muted-foreground/70 mb-2" />
-                    <p className="text-sm text-muted-foreground">Video demonstration coming soon</p>
+                    New
                 </div>
+            )}
+
+            <CardHeader className="pb-3">
+                <div className="flex items-center gap-3 mb-2">
+                    <div className="p-2 rounded-full bg-primary/10">{icon}</div>
+                    <CardTitle>{title}</CardTitle>
+                </div>
+                <CardDescription className="text-base">{description}</CardDescription>
+            </CardHeader>
+
+            <CardContent className="space-y-3">
+                {isExpanded && (
+                    <ul className="space-y-2 pt-1 pb-3" data-testid={`${testId}-details`}>
+                        {details.map((detail, index) => (
+                            <li
+                                key={index}
+                                className="flex items-start gap-2 text-sm"
+                                data-testid={`${testId}-detail-${index}`}
+                            >
+                                <span className="text-primary font-bold">•</span>
+                                <span>{detail}</span>
+                            </li>
+                        ))}
+                    </ul>
+                )}
+
+                <button
+                    className="flex items-center gap-1 text-sm font-medium text-primary hover:underline"
+                    onClick={() => setIsExpanded(!isExpanded)}
+                    aria-expanded={isExpanded}
+                    data-testid={`${testId}-toggle-button`}
+                    aria-label={isExpanded ? `Hide ${title} details` : `Show ${title} details`}
+                >
+                    {isExpanded ? (
+                        <>
+                            <Minus className="h-4 w-4" />
+                            Show less
+                        </>
+                    ) : (
+                        <>
+                            <Plus className="h-4 w-4" />
+                            Show more
+                        </>
+                    )}
+                </button>
             </CardContent>
         </Card>
-    )
+    );
 }
-
