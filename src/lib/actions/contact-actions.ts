@@ -40,7 +40,7 @@ export async function sendContactEmail(formData: ContactFormValues) {
       react: ContactEmail({ 
         name, 
         email, 
-        subject: subjectTitle, 
+        subject, // Keep the original subject value
         message 
       }),
     });
