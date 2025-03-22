@@ -5,6 +5,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { toast } from 'sonner';
 import { Send } from 'lucide-react';
+
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -24,11 +25,15 @@ import {
     SelectValue
 } from '@/components/ui/select';
 
+import { FormError } from '@/components/error/form-error';
+import { useErrorLogging } from '@/hooks/use-error-logging';
 import { sendContactEmail } from '@/lib/actions/contact-actions';
 import { contactFormSchema, ContactFormValues } from '@/lib/schemas/contact-schema';
 
-export function ContactForm() {
+const ContactForm = () => {
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [formError, setFormError] = useState<string | null>(null);
+    const { logError } = useErrorLogging();
 
     const form = useForm<ContactFormValues>({
         resolver: zodResolver(contactFormSchema),
@@ -42,6 +47,7 @@ export function ContactForm() {
 
     async function onSubmit(data: ContactFormValues) {
         setIsSubmitting(true);
+        setFormError(null);
 
         try {
             const result = await sendContactEmail(data);
@@ -50,11 +56,19 @@ export function ContactForm() {
                 toast.success('Message sent successfully! We\'ll be in touch soon.');
                 form.reset();
             } else {
+                setFormError(result.error || 'Failed to send message. Please try again.');
                 toast.error(result.error || 'Failed to send message. Please try again.');
             }
         } catch (error) {
+            // Log the error to our error tracking service
+            logError(error, {
+                component: 'ContactForm',
+                action: 'submit',
+                formData: JSON.stringify(data)
+            });
+
+            setFormError('An unexpected error occurred. Please try again later.');
             toast.error('An unexpected error occurred. Please try again later.');
-            console.error('Contact form error:', error);
         } finally {
             setIsSubmitting(false);
         }
@@ -62,6 +76,8 @@ export function ContactForm() {
 
     return (
         <div data-testid="contact-form">
+            <FormError error={formError} />
+
             <Form {...form}>
                 <form
                     onSubmit={form.handleSubmit(onSubmit)}
@@ -180,3 +196,5 @@ export function ContactForm() {
         </div>
     );
 }
+
+export default ContactForm;
