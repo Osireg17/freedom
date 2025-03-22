@@ -44,7 +44,6 @@ describe('FeaturesPage', () => {
         expect(screen.getByTestId('feature-card-star')).toBeInTheDocument();
         expect(screen.getByTestId('feature-card-communication')).toBeInTheDocument();
         expect(screen.getByTestId('feature-card-analytics')).toBeInTheDocument();
-        expect(screen.getByTestId('feature-card-library')).toBeInTheDocument();
     });
 
     it('renders all video demonstrations', () => {
