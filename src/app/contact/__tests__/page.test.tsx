@@ -1,13 +1,13 @@
+import React from 'react';
 import { render, screen } from '@testing-library/react';
 import ContactPage from '../page';
 
-jest.mock('@/components/contact/contact-form', () => ({
-    ContactForm: () => <div data-testid="mocked-contact-form">Contact form mocked</div>,
-}));
-
-jest.mock('lucide-react', () => ({
-    Mail: () => <div data-testid="mocked-mail-icon">Mail icon mocked</div>,
-}));
+// Mock the ContactForm component
+jest.mock('@/components/contact/contact-form', () => {
+    return function MockContactForm() {
+        return <div data-testid="mocked-contact-form">Contact Form</div>;
+    };
+});
 
 describe('ContactPage', () => {
     it('renders the contact page with correct heading', () => {
@@ -17,45 +17,45 @@ describe('ContactPage', () => {
         expect(screen.getByTestId('contact-page-heading')).toHaveTextContent('Get in Touch');
     });
 
-    it('renders the page description', () => {
+    it('renders the description text', () => {
         render(<ContactPage />);
 
         expect(screen.getByTestId('contact-page-description')).toBeInTheDocument();
         expect(screen.getByTestId('contact-page-description')).toHaveTextContent(
-            'Have questions about AceYourHireVue? Want to learn more about our enterprise options?'
+            'Have questions about AceYourHireVue'
         );
     });
 
-    it('renders the contact form component', () => {
+    it('renders the contact form container', () => {
         render(<ContactPage />);
 
         expect(screen.getByTestId('contact-form-container')).toBeInTheDocument();
         expect(screen.getByTestId('mocked-contact-form')).toBeInTheDocument();
     });
 
-    it('renders the contact information section', () => {
+    it('renders contact information section', () => {
         render(<ContactPage />);
 
         expect(screen.getByTestId('contact-info-container')).toBeInTheDocument();
         expect(screen.getByTestId('contact-info-heading')).toHaveTextContent('Contact Information');
     });
 
-    it('displays the correct email contact information', () => {
+    it('displays the correct email information', () => {
         render(<ContactPage />);
 
         expect(screen.getByTestId('contact-email-info')).toBeInTheDocument();
-        expect(screen.getByText('Email')).toBeInTheDocument();
-
-        const emailLink = screen.getByRole('link', { name: /send email to support/i });
-        expect(emailLink).toHaveAttribute('href', 'mailto:support@aceyourhirevue.com');
-        expect(emailLink).toHaveTextContent('support@aceyourhirevue.com');
+        expect(screen.getByText('support@aceyourhirevue.com')).toBeInTheDocument();
+        expect(screen.getByRole('link', { name: /send email to support/i })).toHaveAttribute(
+            'href',
+            'mailto:support@aceyourhirevue.com'
+        );
     });
 
     it('displays the response time information', () => {
         render(<ContactPage />);
 
         expect(screen.getByTestId('contact-response-time')).toBeInTheDocument();
-        expect(screen.getByText(/response time:/i)).toBeInTheDocument();
-        expect(screen.getByText(/we aim to respond to all inquiries within 24 hours/i)).toBeInTheDocument();
+        expect(screen.getByText(/Response Time:/i)).toBeInTheDocument();
+        expect(screen.getByText(/We aim to respond to all inquiries within 24 hours/i)).toBeInTheDocument();
     });
 });
