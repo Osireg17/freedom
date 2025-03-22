@@ -87,8 +87,8 @@ describe('useErrorLogging', () => {
 
   // This test requires manually triggering global events
   it('should handle global error events', () => {
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-function-type
-    let globalErrorHandler: Function | null = null;
+    // Using the correct type for event handlers
+    let globalErrorHandler: EventListenerOrEventListenerObject | null = null;
     
     // Override the addEventListener mock to capture the handler
     window.addEventListener = jest.fn((event, handler) => {
@@ -113,7 +113,11 @@ describe('useErrorLogging', () => {
     act(() => {
       // Manually trigger the handler
       if (globalErrorHandler) {
-        globalErrorHandler(errorEvent);
+        if (typeof globalErrorHandler === 'function') {
+          globalErrorHandler(errorEvent);
+        } else {
+          globalErrorHandler.handleEvent(errorEvent);
+        }
       }
     });
     
