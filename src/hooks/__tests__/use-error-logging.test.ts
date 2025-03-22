@@ -87,6 +87,7 @@ describe('useErrorLogging', () => {
 
   // This test requires manually triggering global events
   it('should handle global error events', () => {
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-function-type
     let globalErrorHandler: Function | null = null;
     
     // Override the addEventListener mock to capture the handler
