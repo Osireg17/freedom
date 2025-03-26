@@ -1,12 +1,17 @@
 // src/components/pricing/faq-section.tsx
+'use client';
 import {
     Accordion,
     AccordionContent,
     AccordionItem,
     AccordionTrigger,
 } from '@/components/ui/accordion';
+import { useErrorLogging } from '@/hooks/use-error-logging';
 
 export function FaqSection() {
+
+    const { logError } = useErrorLogging();
+
     const faqs = [
         {
             question: 'How does the subscription billing work?',
@@ -30,30 +35,55 @@ export function FaqSection() {
         },
     ];
 
-    return (
-        <div className="w-full" data-testid="pricing-faq-section">
-            <div className="text-center mb-8">
-                <h2 className="text-3xl font-bold mb-2" data-testid="pricing-faq-heading">
-                    Frequently Asked Questions
-                </h2>
-                <p className="text-muted-foreground">
-                    Got questions about our pricing? Find answers to common inquiries below.
-                </p>
+    try {
+        return (
+            <div className="w-full" data-testid="pricing-faq-section">
+                <div className="text-center mb-8">
+                    <h2 className="text-3xl font-bold mb-2" data-testid="pricing-faq-heading">
+                        Frequently Asked Questions
+                    </h2>
+                    <p className="text-muted-foreground">
+                        Got questions about our pricing? Find answers to common inquiries below.
+                    </p>
+                </div>
+                <Accordion type="single" collapsible className="max-w-3xl mx-auto">
+                    {faqs.map((faq, index) => (
+                        <AccordionItem
+                            key={index}
+                            value={`item-${index}`}
+                            data-testid={`pricing-faq-item-${index}`}
+                        >
+                            <AccordionTrigger className="text-left">{faq.question}</AccordionTrigger>
+                            <AccordionContent className="text-muted-foreground">
+                                {faq.answer}
+                            </AccordionContent>
+                        </AccordionItem>
+                    ))}
+                </Accordion>
             </div>
-            <Accordion type="single" collapsible className="max-w-3xl mx-auto">
-                {faqs.map((faq, index) => (
-                    <AccordionItem
-                        key={index}
-                        value={`item-${index}`}
-                        data-testid={`pricing-faq-item-${index}`}
-                    >
-                        <AccordionTrigger className="text-left">{faq.question}</AccordionTrigger>
-                        <AccordionContent className="text-muted-foreground">
-                            {faq.answer}
-                        </AccordionContent>
-                    </AccordionItem>
-                ))}
-            </Accordion>
-        </div>
-    );
+        );
+    } catch (error: unknown) {
+        const errorString = error instanceof Error ? error.message : 'An error occurred';
+        const errorStack = error instanceof Error ? error.stack : undefined;
+        logError(error, {
+            message: errorString,
+            stack: errorStack,
+            component: 'FaqSection'
+        });
+
+        // Return a simplified fallback UI
+        return (
+            <div className="w-full" data-testid="pricing-faq-section-error">
+                <div className="text-center mb-8">
+                    <h2 className="text-3xl font-bold mb-2">
+                        Frequently Asked Questions
+                    </h2>
+                    <p className="text-muted-foreground">
+                        We&apos;re experiencing an issue loading the FAQ section.
+                        If you have questions, please <a href="/contact" className="text-primary hover:underline">contact our support team</a>.
+                    </p>
+                </div>
+            </div>
+        );
+    }
 }

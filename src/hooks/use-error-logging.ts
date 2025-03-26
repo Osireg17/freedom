@@ -1,7 +1,9 @@
+// src/hooks/use-error-logging.ts
 'use client';
 
 import { useState, useEffect } from 'react';
 import { logErrorToService } from '@/lib/error/logger';
+import { useLogger } from '@/lib/axiom/client';
 
 interface ErrorDetails {
   message: string;
@@ -17,19 +19,22 @@ interface ErrorDetails {
  */
 export function useErrorLogging() {
   const [lastError, setLastError] = useState<Error | null>(null);
-
+  const axiomLogger = useLogger();
+  
   // Send client errors to backend for logging
   const logError = async (details: ErrorDetails) => {
     try {
-      // In a full implementation, this would send to a server endpoint
-      // await axios.post('/api/logging/client-error', {
-      //   timestamp: new Date().toISOString(),
-      //   url: window.location.href,
-      //   userAgent: navigator.userAgent,
-      //   ...details,
-      // });
+      // Log to Axiom for production
+      if (process.env.NODE_ENV === 'production') {
+        axiomLogger.error(details.message, {
+          stack: details.stack,
+          componentStack: details.componentStack,
+          location: details.location,
+          ...details.additionalContext
+        });
+      }
       
-      // For now just log to console or service
+      // Also log through our existing service for backward compatibility
       logErrorToService(
         new Error(details.message), 
         { 
