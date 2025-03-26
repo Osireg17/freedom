@@ -1,6 +1,5 @@
 import axiomClient from '@/lib/axiom/axiom';
 import { Logger, AxiomJSTransport } from '@axiomhq/logging';
-import { nextJsFormatters } from '@axiomhq/nextjs';
 import { NextRequest, NextResponse } from 'next/server';
 
 // Create the Axiom logger instance
@@ -11,7 +10,6 @@ export const logger = new Logger({
       dataset: process.env.NEXT_PUBLIC_AXIOM_DATASET! 
     }),
   ],
-  formatters: nextJsFormatters,
 });
 
 // Create a typed version of the route handler for App Router
