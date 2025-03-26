@@ -6,6 +6,7 @@ import { Toaster } from '@/components/ui/sonner';
 import { ThemeProvider } from '@/components/theme-provider';
 import { Header } from '@/components/layout/header';
 import { Footer } from '@/components/layout/footer';
+import { WebVitals } from '@/lib/axiom/client';
 const inter = Inter({ subsets: ['latin'] });
 
 export const metadata = {
@@ -18,6 +19,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     return (
         <ClerkProvider>
             <html lang="en" suppressHydrationWarning>
+                <WebVitals />
                 <body className={inter.className}>
                     <ThemeProvider
                         attribute="class"

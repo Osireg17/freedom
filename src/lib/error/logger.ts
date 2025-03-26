@@ -1,9 +1,10 @@
 /**
  * Error logging utility for consistent error logging across the application
- * Follows the error handling strategy defined in the project documentation
+ * Uses Axiom for production logging and console for development
  */
 
-// In production, this would connect to a service like BetterStack or another logging service
+import { logger as axiomLogger } from '@/lib/axiom/server';
+
 const isProduction = process.env.NODE_ENV === 'production';
 
 interface ErrorContext {
@@ -14,36 +15,24 @@ interface ErrorContext {
  * Log an error to the appropriate service based on environment
  */
 export function logErrorToService(error: Error, context: ErrorContext = {}): void {
+  // Create a structured error object
+  const errorData = {
+    name: error.name,
+    message: error.message,
+    stack: error.stack,
+    ...context,
+    timestamp: new Date().toISOString(),
+    environment: process.env.NODE_ENV,
+  };
+
   // In development, output to console for immediate feedback
   if (!isProduction) {
-    console.error('Error:', error.message, {
-      name: error.name,
-      stack: error.stack,
-      ...context,
-    });
+    console.error('Error:', error.message, errorData);
     return;
   }
 
-  // In production, send to error logging service
-  // This would be replaced with actual implementation using BetterStack or similar
-  console.error('Error:', {
-    message: error.message,
-    name: error.name,
-    stack: error.stack,
-    timestamp: new Date().toISOString(),
-    environment: process.env.NODE_ENV,
-    ...context,
-  });
-
-  // In a real implementation, you would send to a service like:
-  // return logtail.error(error.message, {
-  //   level: 'error',
-  //   name: error.name,
-  //   stack: error.stack,
-  //   ...context,
-  //   environment: process.env.NODE_ENV,
-  //   timestamp: new Date().toISOString(),
-  // });
+  // In production, send to Axiom
+  axiomLogger.error(error.message, errorData);
 }
 
 /**
@@ -54,17 +43,20 @@ export function logServerEvent(
   message: string,
   context: ErrorContext = {}
 ): void {
-  if (!isProduction) {
-    console[level](message, context);
-    return;
-  }
-
-  // In production, would send to logging service
-  console[level](message, {
+  // Create structured log data
+  const logData = {
     ...context,
     timestamp: new Date().toISOString(),
     environment: process.env.NODE_ENV,
-  });
+  };
+
+  if (!isProduction) {
+    console[level](message, logData);
+    return;
+  }
+
+  // In production, use Axiom
+  axiomLogger[level](message, logData);
 }
 
 /**
