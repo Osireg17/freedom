@@ -27,6 +27,7 @@
         "@axiomhq/logging": "^0.1.1",
         "@axiomhq/nextjs": "^0.1.1",
         "@axiomhq/react": "^0.1.1",
+        "@clerk/elements": "^0.23.7",
         "@clerk/nextjs": "^6.12.5",
         "@deepgram/sdk": "^3.11.2",
         "@hookform/resolvers": "^4.1.3",
