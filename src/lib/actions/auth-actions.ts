@@ -143,7 +143,7 @@ export async function getCurrentUser() {
  * Protects a route by checking if the user is authenticated
  * If not, redirects to the sign-in page
  */
-export async function protectRoute(redirectTo: string = '/auth/sign-in') {
+export async function protectRoute(redirectTo: string = '/sign-in') {
   const user = await getCurrentUser();
   
   if (!user) {

@@ -64,7 +64,7 @@ export default function SignUp() {
 
     const onSubmit = async (values: SignUpFormValues) => {
         try {
-            setIsLoading(true)
+            setIsLoading(true);
 
             // Sign up with Supabase
             const { data, error } = await supabase.auth.signUp({
@@ -76,28 +76,28 @@ export default function SignUp() {
                         email_confirmed: false, // We'll use this to track confirmation status
                     },
                 },
-            })
+            });
 
             if (error) {
-                toast.error(error.message)
-                return
+                toast.error(error.message);
+                return;
             }
 
             if (data?.user) {
                 // Note: We don't create the user record here
                 // It will be created after email confirmation when they complete their profile
-                console.log("User created with ID:", data.user.id)
+                console.log("User created with ID:", data.user.id);
             }
 
-            toast.success("Please check your email to confirm your account")
-            router.push("/auth/sign-in?message=verification_sent")
+            toast.success("Please check your email to confirm your account");
+            router.push("/sign-in?message=verification_sent");
         } catch (error) {
-            logError(error, { action: "signUp" })
-            toast.error("An error occurred during sign up. Please try again.")
+            logError(error, { action: "signUp" });
+            toast.error("An error occurred during sign up. Please try again.");
         } finally {
-            setIsLoading(false)
+            setIsLoading(false);
         }
-    }
+    };
 
     return (
         <div data-testid="signup-form-container">
@@ -246,7 +246,7 @@ export default function SignUp() {
                     </div>
                     <div className="mt-4 text-sm">
                         Already have an account?{" "}
-                        <Link href="/auth/sign-in" className="font-medium text-primary hover:underline" data-testid="signup-signin-link">
+                        <Link href="/sign-in" className="font-medium text-primary hover:underline" data-testid="signup-signin-link">
                             Sign in
                         </Link>
                     </div>
