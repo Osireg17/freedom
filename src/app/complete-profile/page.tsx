@@ -20,7 +20,7 @@ export default async function CompleteProfilePage() {
     }
 
     // Check if the user's email is verified
-    const isEmailVerified = user.email_confirmed_at || user.user_metadata?.email_confirmed;
+    const isEmailVerified = user.email_confirmed_at || user.user_metadata?.email_confirmed || user.user_metadata?.email_verified;
 
     return (
         <div className="container flex h-screen w-full flex-col items-center justify-center" data-testid="complete-profile-page">
