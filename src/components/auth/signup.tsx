@@ -40,6 +40,7 @@ export default function SignUp() {
     const [isLoading, setIsLoading] = useState(false)
     const [showPassword, setShowPassword] = useState(false)
     const [showConfirmPassword, setShowConfirmPassword] = useState(false)
+    // State variable to track if the toast has already been shown
     const { logError } = useErrorLogging()
     const supabase = createClient()
 
@@ -73,7 +74,7 @@ export default function SignUp() {
                 options: {
                     emailRedirectTo: `${window.location.origin}/auth/callback`,
                     data: {
-                        email_confirmed: false, // We'll use this to track confirmation status
+                        email_confirmed: false,
                     },
                 },
             });
@@ -84,13 +85,12 @@ export default function SignUp() {
             }
 
             if (data?.user) {
-                // Note: We don't create the user record here
-                // It will be created after email confirmation when they complete their profile
-                console.log("User created with ID:", data.user.id);
-            }
+                // Success! Show notification and redirect to complete profile
+                toast.success("Account created successfully! Please complete your profile.");
 
-            toast.success("Please check your email to confirm your account");
-            router.push("/sign-in?message=verification_sent");
+                // Navigate directly to complete profile
+                router.push("/complete-profile");
+            }
         } catch (error) {
             logError(error, { action: "signUp" });
             toast.error("An error occurred during sign up. Please try again.");
@@ -255,4 +255,3 @@ export default function SignUp() {
         </div>
     )
 }
-
