@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { z } from 'zod';
@@ -40,7 +40,7 @@ export default function SignIn() {
     // Check if there's a redirect parameter
     const redirectTo = searchParams.get('redirect') || '/dashboard';
 
-    // Check for messages from the URL (e.g., session expired, verification)
+    // Retrieve messages from URL parameters
     const errorMessage = searchParams.get('error');
     const message = searchParams.get('message');
 
@@ -52,24 +52,25 @@ export default function SignIn() {
         },
     });
 
-    // Show error toast if error parameter is in URL
-    if (errorMessage) {
-        const errorText =
-            errorMessage === 'session_expired'
-                ? 'Your session has expired. Please sign in again.'
-                : 'Authentication error. Please sign in again.';
+    // Show error toast if error parameter is in URL (only once on mount)
+    useEffect(() => {
+        if (errorMessage) {
+            const errorText =
+                errorMessage === 'session_expired'
+                    ? 'Your session has expired. Please sign in again.'
+                    : 'Authentication error. Please sign in again.';
+            toast.error(errorText);
+        }
+    }, [errorMessage]);
 
-        toast.error(errorText);
-    }
-
-    // Show success message if verification was sent or completed
-    if (message) {
+    // Show success message if verification was sent or completed (only once on mount)
+    useEffect(() => {
         if (message === 'verification_sent') {
             toast.success('Please check your email to verify your account before signing in.');
         } else if (message === 'verification_complete') {
             toast.success('Your email has been verified! You can now sign in.');
         }
-    }
+    }, [message]);
 
     const onSubmit = async (values: SignInFormValues) => {
         try {

@@ -19,11 +19,24 @@ export default async function CompleteProfilePage() {
         redirect('/sign-in');
     }
 
+    // Check if the user's email is verified
+    const isEmailVerified = user.email_confirmed_at || user.user_metadata?.email_confirmed;
+
     return (
         <div className="container flex h-screen w-full flex-col items-center justify-center" data-testid="complete-profile-page">
             <div className="mx-auto flex w-full flex-col justify-center space-y-6 sm:w-[450px]">
                 <div className="flex flex-col space-y-2 text-center">
                     <h1 className="text-2xl font-semibold tracking-tight">Complete Your Profile</h1>
+
+                    {!isEmailVerified && (
+                        <div className="p-3 bg-yellow-50 rounded-md border border-yellow-200 mb-4">
+                            <p className="text-sm text-yellow-800">
+                                <strong>Note:</strong> We&apos;ve sent a verification email to {user.email}.
+                                Please verify your email for full access to all features.
+                            </p>
+                        </div>
+                    )}
+
                     <p className="text-sm text-muted-foreground">
                         Almost there! Let us know your name to complete your account setup.
                     </p>
