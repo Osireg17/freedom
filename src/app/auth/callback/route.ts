@@ -71,13 +71,23 @@ export async function GET(request: NextRequest) {
     }
     
     // This is likely a callback from an OAuth provider
-    // For OAuth, also check if they need to complete their profile
+    // For OAuth, also check if they need to complete their profile and have confirmed email
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
     
-    if (user && !user.user_metadata?.firstName) {
-      // New OAuth user or user who hasn't completed their profile
-      return NextResponse.redirect(new URL('/complete-profile', request.url));
+    if (user) {
+      // Check if email is confirmed before allowing access to complete-profile
+      const isEmailConfirmed = user.user_metadata?.email_confirmed === true;
+      
+      if (!isEmailConfirmed) {
+        // If email is not confirmed, redirect to a page asking them to confirm email first
+        return NextResponse.redirect(new URL('/verify-email?message=confirmation_required', request.url));
+      }
+      
+      if (!user.user_metadata?.firstName) {
+        // Email confirmed and profile not complete, redirect to complete-profile
+        return NextResponse.redirect(new URL('/complete-profile', request.url));
+      }
     }
     
     // For established users, redirect to the dashboard or specified next page
