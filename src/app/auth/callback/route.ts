@@ -39,7 +39,7 @@ export async function GET(request: NextRequest) {
             
             // Redirect to the complete profile page
             // This is where they'll fill in their name, etc.
-            return NextResponse.redirect(new URL('/auth/complete-profile', request.url));
+            return NextResponse.redirect(new URL('/complete-profile', request.url));
           }
         }
         

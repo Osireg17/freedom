@@ -88,7 +88,7 @@ export default function ErrorPage({ searchParams }: ErrorPageProps) {
                         data-testid="error-page-sign-in-button"
                         aria-label="Go to sign in page"
                     >
-                        <Link href="/auth/sign-in">
+                        <Link href="/sign-in">
                             Sign In
                         </Link>
                     </Button>

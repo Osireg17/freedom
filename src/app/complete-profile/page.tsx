@@ -1,4 +1,4 @@
-// src/app/complete-profile/page.tsx
+// src/app/auth/complete-profile/page.tsx
 import { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
@@ -16,7 +16,7 @@ export default async function CompleteProfilePage() {
 
     // If there's no user or an error, redirect to sign in
     if (error || !user) {
-        redirect('/auth/sign-in');
+        redirect('/sign-in');
     }
 
     return (

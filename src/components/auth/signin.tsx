@@ -172,7 +172,7 @@ export default function SignIn() {
                     <div className="text-sm text-muted-foreground">
                         Don&apos;t have an account?{' '}
                         <Link
-                            href="/auth/sign-up"
+                            href="/sign-up"
                             className="text-primary hover:underline"
                             data-testid="signin-signup-link"
                         >
