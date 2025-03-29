@@ -60,7 +60,7 @@ export function Header() {
                         data-testid="header-signin-button"
                         aria-label="Sign in to your account"
                     >
-                        <Link href="/sign-in">Sign In</Link>
+                        <Link href="/auth/sign-in">Sign In</Link>
                     </Button>
                     <Button
                         size="sm"
@@ -68,7 +68,7 @@ export function Header() {
                         data-testid="header-signup-button"
                         aria-label="Create a new account"
                     >
-                        <Link href="/sign-up">Sign Up</Link>
+                        <Link href="/auth/sign-up">Sign Up</Link>
                     </Button>
                 </div>
 
@@ -123,7 +123,7 @@ export function Header() {
                                 data-testid="header-mobile-signin-button"
                                 onClick={() => setIsMenuOpen(false)}
                             >
-                                <Link href="/sign-in">Sign In</Link>
+                                <Link href="/auth/sign-in">Sign In</Link>
                             </Button>
                             <Button
                                 size="sm"
@@ -131,7 +131,7 @@ export function Header() {
                                 data-testid="header-mobile-signup-button"
                                 onClick={() => setIsMenuOpen(false)}
                             >
-                                <Link href="/sign-up">Sign Up</Link>
+                                <Link href="/auth/sign-up">Sign Up</Link>
                             </Button>
                         </div>
                     </nav>
