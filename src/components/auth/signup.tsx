@@ -85,15 +85,12 @@ export default function SignUp() {
             }
 
             if (data?.user) {
-                // Success! Show notification and redirect to complete profile
-                toast.success("Account created successfully! Please complete your profile.");
-
-                // Navigate directly to complete profile
-                router.push("/complete-profile");
+                // Success! Redirect to verify email page
+                router.push(`/verify-email?email=${encodeURIComponent(values.email)}&type=signup`);
             }
         } catch (error) {
             logError(error, { action: "signUp" });
-            toast.error("An error occurred during sign up. Please try again.");
+            toast.error('An error occurred during sign up. Please try again.');
         } finally {
             setIsLoading(false);
         }

@@ -69,6 +69,8 @@ export default function SignIn() {
             toast.success('Please check your email to verify your account before signing in.');
         } else if (message === 'verification_complete') {
             toast.success('Your email has been verified! You can now sign in.');
+        } else if (message === 'password_reset_complete') {
+            toast.success('Your password has been successfully reset! You can now sign in with your new password.');
         }
     }, [message]);
 

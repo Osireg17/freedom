@@ -6,7 +6,7 @@ import { logServerError } from '@/lib/error/logger';
 
 /**
  * Route handler for authentication callbacks from Supabase
- * Handles email confirmation and OAuth provider callbacks
+ * Handles email confirmation, password reset, and OAuth provider callbacks
  */
 export async function GET(request: NextRequest) {
   try {
@@ -15,7 +15,7 @@ export async function GET(request: NextRequest) {
     const type = searchParams.get('type') as EmailOtpType | null;
     const next = searchParams.get('next') ?? '/dashboard';
     
-    // If this is an email confirmation
+    // If this is an email confirmation, password reset, or email change
     if (token_hash && type) {
       const supabase = await createClient();
       
@@ -25,49 +25,50 @@ export async function GET(request: NextRequest) {
         token_hash,
       });
       
-      if (!error) {
-        // Get the user data regardless of verification type
-        const { data: userData } = await supabase.auth.getUser();
-        
-        // Update the user metadata to reflect email confirmation
-        if (userData?.user) {
-          await supabase.auth.updateUser({
-            data: { email_confirmed: true }
-          });
-        }
-        
-        // For new users after signup or users who haven't completed their profile yet
-        // Always redirect them to the complete-profile page
-        if (type === 'signup' || type === 'email') {
-          console.log("Redirecting to complete profile after email verification");
+      if (error) {
+        // If verification fails, redirect to error page with details
+        console.error('OTP verification error:', error);
+        return NextResponse.redirect(
+          new URL(`/verify-email?message=Error: ${encodeURIComponent(error.message)}`, request.url)
+        );
+      }
+      
+      // Get the user data regardless of verification type
+      const { data: userData } = await supabase.auth.getUser();
+      
+      // Update the user metadata to reflect email confirmation
+      if (userData?.user) {
+        await supabase.auth.updateUser({
+          data: { email_confirmed: true }
+        });
+      }
+      
+      // For new users after signup or users who haven't completed their profile yet
+      if (type === 'signup' || type === 'email') {
+        console.log("Redirecting to complete profile after email verification");
+        return NextResponse.redirect(new URL('/complete-profile', request.url));
+      }
+      
+      // For password reset, redirect to reset-password page to set new password
+      if (type === 'recovery') {
+        return NextResponse.redirect(new URL('/reset-password', request.url));
+      }
+      
+      // For any other verification types, check if they should go to complete-profile
+      // or dashboard based on whether they've completed their profile
+      if (userData?.user) {
+        // If user hasn't completed their profile (no firstName in metadata)
+        // redirect them to complete-profile
+        if (!userData.user.user_metadata?.firstName) {
           return NextResponse.redirect(new URL('/complete-profile', request.url));
         }
         
-        // For password reset, redirect to sign-in with success message
-        if (type === 'recovery') {
-          return NextResponse.redirect(new URL('/sign-in?message=password_reset_complete', request.url));
-        }
-        
-        // For any other verification types, check if they should go to complete-profile
-        // or dashboard based on whether they've completed their profile
-        if (userData?.user) {
-          // If user hasn't completed their profile (no firstName in metadata)
-          // redirect them to complete-profile
-          if (!userData.user.user_metadata?.firstName) {
-            return NextResponse.redirect(new URL('/complete-profile', request.url));
-          }
-          
-          // Otherwise, redirect to dashboard
-          return NextResponse.redirect(new URL('/dashboard', request.url));
-        }
-        
-        // Default fallback for verification success but no specific path
-        return NextResponse.redirect(new URL('/complete-profile', request.url));
-      } else {
-        // If verification fails, redirect to error page with details
-        console.error('OTP verification error:', error);
-        return NextResponse.redirect(new URL('/error?code=verification_failed', request.url));
+        // Otherwise, redirect to dashboard
+        return NextResponse.redirect(new URL('/dashboard', request.url));
       }
+      
+      // Default fallback for verification success but no specific path
+      return NextResponse.redirect(new URL('/complete-profile', request.url));
     }
     
     // This is likely a callback from an OAuth provider
@@ -81,7 +82,9 @@ export async function GET(request: NextRequest) {
       
       if (!isEmailConfirmed) {
         // If email is not confirmed, redirect to a page asking them to confirm email first
-        return NextResponse.redirect(new URL('/verify-email?message=confirmation_required', request.url));
+        return NextResponse.redirect(
+          new URL('/verify-email?message=Please verify your email before continuing&type=confirmation', request.url)
+        );
       }
       
       if (!user.user_metadata?.firstName) {
