@@ -1,69 +1,42 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 // src/utils/supabase/middleware.ts
 import { createServerClient } from '@supabase/ssr';
-import { NextResponse, type NextRequest } from 'next/server';
+import { NextResponse } from 'next/server';
+import { cookies } from 'next/headers';
 
 /**
- * Middleware function to handle Supabase authentication session refresh
- * Used by Next.js middleware.ts to refresh expired Auth tokens and store them in cookies
+ * Middleware function to refresh the Supabase session using Supabase's SSR pattern.
+ * This version follows the docs by using `getAll` and `setAll` for cookie handling.
  */
-export async function updateSupabaseSession(request: NextRequest) {
-  // Create a response object to modify and return later
-  const response = NextResponse.next({
-    request: {
-      headers: request.headers,
-    },
-  });
+export async function updateSupabaseSession() {
+  // Get the request cookies
+  const cookiesInstance = cookies();
+  const requestCookies = await cookiesInstance;
+  // Create a NextResponse to apply any cookie changes
+  const response = NextResponse.next();
 
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-  const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-
-  // Create a Supabase client
+  // Create a Supabase client with cookie handlers matching the Supabase docs
   const supabase = createServerClient(
-    supabaseUrl,
-    supabaseKey,
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       cookies: {
-        get(name: string) {
-          return request.cookies.get(name)?.value;
-        },
-        set(name: string, value: string, options: any) {
-          // Convert to the NextResponse format
-          request.cookies.set({
-            name,
-            value,
-            ...options,
-          });
-
-          // Set the cookie in the response as well
-          response.cookies.set({
-            name,
-            value,
-            ...options,
-          });
-        },
-        remove(name: string, options: any) {
-          // Convert to the NextResponse format
-          request.cookies.set({
-            name,
-            value: '',
-            ...options,
-          });
-
-          // Delete the cookie in the response
-          response.cookies.set({
-            name,
-            value: '',
-            ...options,
-          });
+        getAll: () => requestCookies.getAll(),
+        setAll: (cookiesToSet) => {
+          try {
+            cookiesToSet.forEach(({ name, value, options }) => {
+              // Set cookies on the NextResponse
+              response.cookies.set(name, value, options);
+            });
+          } catch {
+            // Ignore errors (e.g., when called from a Server Component)
+          }
         },
       },
     }
   );
 
-  // Refresh the session - this is what does the actual work
-  // Even though we don't directly use the session value, this call
-  // is crucial as it refreshes tokens and sets cookies via the cookie handlers above
+  // Refresh the session (this updates cookies via the setAll handler)
   await supabase.auth.getSession();
 
   return response;
