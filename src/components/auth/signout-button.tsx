@@ -13,6 +13,7 @@ interface SignOutButtonProps {
     variant?: 'default' | 'destructive' | 'outline' | 'secondary' | 'ghost' | 'link';
     size?: 'default' | 'sm' | 'lg' | 'icon';
     showIcon?: boolean;
+    hideText?: boolean; // Added this new prop
     className?: string;
 }
 
@@ -20,6 +21,7 @@ export function SignOutButton({
     variant = 'outline',
     size = 'default',
     showIcon = true,
+    hideText = false, // Default to showing text
     className = ''
 }: SignOutButtonProps) {
     const [isLoading, setIsLoading] = useState(false);
@@ -57,7 +59,7 @@ export function SignOutButton({
     return (
         <Button
             variant={variant}
-            size={size}
+            size={hideText && showIcon ? 'icon' : size} // Use icon size when only showing icon
             onClick={handleSignOut}
             disabled={isLoading}
             data-testid="sign-out-button"
@@ -68,8 +70,8 @@ export function SignOutButton({
                 'Signing out...'
             ) : (
                 <>
-                    {showIcon && <LogOut className="mr-2 h-4 w-4" />}
-                    Sign out
+                    {showIcon && <LogOut className={hideText ? "" : "mr-2"} size={16} />}
+                    {!hideText && <span>Sign out</span>}
                 </>
             )}
         </Button>
