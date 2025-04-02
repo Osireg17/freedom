@@ -171,7 +171,7 @@ export default function SignIn() {
                         </form>
                     </Form>
                 </CardContent>
-                <CardFooter className="flex justify-center p-4">
+                <CardFooter className="flex flex-col items-center gap-4 p-4">
                     <div className="text-sm text-muted-foreground">
                         Don&apos;t have an account?{' '}
                         <Link
@@ -180,6 +180,15 @@ export default function SignIn() {
                             data-testid="signin-signup-link"
                         >
                             Sign up
+                        </Link>
+                    </div>
+                    <div className="text-sm text-muted-foreground">
+                        <Link
+                            href="/forgot-password"
+                            className="text-primary hover:underline"
+                            data-testid="signin-forgot-password-link"
+                        >
+                            Forgot your password?
                         </Link>
                     </div>
                 </CardFooter>
