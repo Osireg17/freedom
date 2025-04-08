@@ -23,7 +23,7 @@ export default async function DashboardLayout({
             <DashboardSidebar />
 
             <main
-                className="ml-64 flex-1 px-8 py-6 bg-background overflow-y-auto space-y-6"
+                className="flex-1 p-4 lg:p-8 bg-background"
                 data-testid="dashboard-content"
             >
                 {children}
