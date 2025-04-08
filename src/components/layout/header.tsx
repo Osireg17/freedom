@@ -1,13 +1,42 @@
 // src/components/layout/header.tsx
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Menu, X } from 'lucide-react';
+import { createClient } from '@/lib/supabase/client';
+import { User } from '@supabase/supabase-js';
 
 export function Header() {
     const [isMenuOpen, setIsMenuOpen] = useState(false);
+    const [user, setUser] = useState<User | null>(null);
+    const [isLoading, setIsLoading] = useState(true);
+    const pathname = usePathname();
+
+    // Don't render header on dashboard pages
+    const isDashboardPage = pathname && pathname.startsWith('/dashboard');
+
+    useEffect(() => {
+        async function getUser() {
+            setIsLoading(true);
+            try {
+                const supabase = createClient();
+                const { data: { user } } = await supabase.auth.getUser();
+                setUser(user);
+            } catch (error) {
+                console.error('Error getting user:', error);
+            } finally {
+                setIsLoading(false);
+            }
+        }
+
+        getUser();
+    }, []);
+
+    // Don't render header on dashboard pages
+    if (isDashboardPage) return null;
 
     return (
         <header
@@ -53,23 +82,40 @@ export function Header() {
 
                 {/* Authentication Buttons - Desktop */}
                 <div className="hidden md:flex items-center gap-4">
-                    <Button
-                        variant="outline"
-                        size="sm"
-                        asChild
-                        data-testid="header-signin-button"
-                        aria-label="Sign in to your account"
-                    >
-                        <Link href="/sign-in">Sign In</Link>
-                    </Button>
-                    <Button
-                        size="sm"
-                        asChild
-                        data-testid="header-signup-button"
-                        aria-label="Create a new account"
-                    >
-                        <Link href="/sign-up">Sign Up</Link>
-                    </Button>
+                    {!isLoading && (
+                        user ? (
+                            <>
+                                <Button
+                                    size="sm"
+                                    asChild
+                                    data-testid="header-dashboard-button"
+                                    aria-label="Go to dashboard"
+                                >
+                                    <Link href="/dashboard">Dashboard</Link>
+                                </Button>
+                            </>
+                        ) : (
+                            <>
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    asChild
+                                    data-testid="header-signin-button"
+                                    aria-label="Sign in to your account"
+                                >
+                                    <Link href="/sign-in">Sign In</Link>
+                                </Button>
+                                <Button
+                                    size="sm"
+                                    asChild
+                                    data-testid="header-signup-button"
+                                    aria-label="Create a new account"
+                                >
+                                    <Link href="/sign-up">Sign Up</Link>
+                                </Button>
+                            </>
+                        )
+                    )}
                 </div>
 
                 {/* Mobile Menu Button */}
@@ -116,23 +162,38 @@ export function Header() {
                             Contact
                         </Link>
                         <div className="flex flex-col space-y-2 pt-2">
-                            <Button
-                                variant="outline"
-                                size="sm"
-                                asChild
-                                data-testid="header-mobile-signin-button"
-                                onClick={() => setIsMenuOpen(false)}
-                            >
-                                <Link href="/sign-in">Sign In</Link>
-                            </Button>
-                            <Button
-                                size="sm"
-                                asChild
-                                data-testid="header-mobile-signup-button"
-                                onClick={() => setIsMenuOpen(false)}
-                            >
-                                <Link href="/sign-up">Sign Up</Link>
-                            </Button>
+                            {!isLoading && (
+                                user ? (
+                                    <Button
+                                        size="sm"
+                                        asChild
+                                        data-testid="header-mobile-dashboard-button"
+                                        onClick={() => setIsMenuOpen(false)}
+                                    >
+                                        <Link href="/dashboard">Dashboard</Link>
+                                    </Button>
+                                ) : (
+                                    <>
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            asChild
+                                            data-testid="header-mobile-signin-button"
+                                            onClick={() => setIsMenuOpen(false)}
+                                        >
+                                            <Link href="/sign-in">Sign In</Link>
+                                        </Button>
+                                        <Button
+                                            size="sm"
+                                            asChild
+                                            data-testid="header-mobile-signup-button"
+                                            onClick={() => setIsMenuOpen(false)}
+                                        >
+                                            <Link href="/sign-up">Sign Up</Link>
+                                        </Button>
+                                    </>
+                                )
+                            )}
                         </div>
                     </nav>
                 </div>
