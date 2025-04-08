@@ -145,7 +145,7 @@ export default function DashboardContent({ user }: DashboardContentProps) {
                                     <CardTitle className="text-lg">Practice Streak</CardTitle>
                                     <div className="flex items-center gap-1.5 bg-amber-100 dark:bg-amber-950/30 text-amber-800 dark:text-amber-300 px-2.5 py-1.5 rounded-full text-sm" data-testid="streak-counter">
                                         <Award className="h-4 w-4" />
-                                        <span className="font-medium">{mockData.streakData.currentStreak} day streak</span>
+                                        <span className="text-base">{mockData.streakData.currentStreak} day streak</span>
                                     </div>
                                 </div>
                                 <TabsList className="grid w-full grid-cols-2">
