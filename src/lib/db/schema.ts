@@ -13,10 +13,9 @@ export const interviewTypeEnum = pgEnum('interview_type', ['ai', 'custom', 'resu
 export const interviewStatusEnum = pgEnum('interview_status', ['not_started', 'ongoing', 'completed']);
 export const questionTypeEnum = pgEnum('question_type', ['behavioral', 'technical', 'custom']);
 
-// Users table
+// Users table - updated for Supabase Auth
 export const users = pgTable('users', {
-  id: uuid('id').primaryKey().default(sql`uuid_generate_v4()`),
-  clerkId: text('clerk_id').notNull().unique(),
+  id: uuid('id').primaryKey(),
   firstName: text('first_name').notNull(),
   lastName: text('last_name').notNull(),
   email: text('email').notNull(),
@@ -29,7 +28,7 @@ export const users = pgTable('users', {
   updatedAt: timestamp('updated_at').defaultNow().notNull()
 });
 
-// Interviews table
+// Interviews table - remains the same
 export const interviews = pgTable('interviews', {
   id: uuid('id').primaryKey().default(sql`uuid_generate_v4()`),
   userId: uuid('user_id').references(() => users.id).notNull(),
@@ -47,7 +46,7 @@ export const interviews = pgTable('interviews', {
   updatedAt: timestamp('updated_at').defaultNow().notNull()
 });
 
-// Interview Questions table
+// Interview Questions table - remains the same
 export const interviewQuestions = pgTable('interview_questions', {
   id: uuid('id').primaryKey().default(sql`uuid_generate_v4()`),
   interviewId: uuid('interview_id').references(() => interviews.id).notNull(),
@@ -57,7 +56,7 @@ export const interviewQuestions = pgTable('interview_questions', {
   originalQuestionId: uuid('original_question_id'),
 });
 
-// Interview Answers table
+// Interview Answers table - remains the same
 export const interviewAnswers = pgTable('interview_answers', {
   id: uuid('id').primaryKey().default(sql`uuid_generate_v4()`),
   interviewId: uuid('interview_id').references(() => interviews.id).notNull(),
@@ -81,14 +80,14 @@ export const interviewAnswers = pgTable('interview_answers', {
   updatedAt: timestamp('updated_at').defaultNow().notNull()
 });
 
-// Behavioral Questions table
+// Behavioral Questions table - remains the same
 export const behavioralQuestions = pgTable('behavioral_questions', {
   id: uuid('id').primaryKey().default(sql`uuid_generate_v4()`),
   category: text('category').notNull(),
   questionText: text('question_text').notNull(),
 });
 
-// Relationships
+// Relationships - remain the same
 export const usersRelations = relations(users, ({ many }) => ({
   interviews: many(interviews)
 }));
