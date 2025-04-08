@@ -1,0 +1,91 @@
+'use client';
+
+import { CrownIcon, CheckIcon } from 'lucide-react';
+import { Card, CardHeader, CardTitle, CardContent, CardFooter } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Progress } from '@/components/ui/progress';
+
+interface SubscriptionBannerProps {
+    subscription: {
+        tier: string;
+        interviewsRemaining: number;
+        nextReset: string;
+    };
+}
+
+export function SubscriptionBanner({ subscription }: SubscriptionBannerProps) {
+    const nextReset = new Date(subscription.nextReset);
+    const formattedReset = nextReset.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+
+    const totalInterviews = subscription.tier === 'free' ? 3 : subscription.tier === 'standard' ? 10 : Infinity;
+    const interviewsUsed = totalInterviews === Infinity ? 0 : totalInterviews - subscription.interviewsRemaining;
+    const progressPercentage = totalInterviews === Infinity ? 0 : (interviewsUsed / totalInterviews) * 100;
+
+    return (
+        <Card className="overflow-hidden" data-testid="subscription-banner">
+            <CardHeader className="p-4">
+                <CardTitle className="text-sm font-medium uppercase">{subscription.tier} Plan</CardTitle>
+                {subscription.tier !== 'pro' && (
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        className="border-primary text-primary bg-white hover:bg-primary/10"
+                        data-testid="upgrade-button"
+                        aria-label="Upgrade your subscription"
+                    >
+                        <CrownIcon className="h-3 w-3 mr-1" />
+                        Upgrade
+                    </Button>
+                )}
+            </CardHeader>
+            <CardContent className="p-4">
+                {subscription.tier !== 'pro' ? (
+                    <>
+                        <div className="flex justify-between items-center text-sm mb-1.5">
+                            <div>Interviews Remaining</div>
+                            <div className="font-medium">
+                                {subscription.interviewsRemaining} of {totalInterviews}
+                            </div>
+                        </div>
+                        <Progress value={progressPercentage} className="h-2" />
+                        <div className="mt-1 text-xs text-muted-foreground">Resets on {formattedReset}</div>
+                    </>
+                ) : (
+                    <div className="py-2">
+                        <div className="text-sm">Unlimited interviews available</div>
+                        <div className="text-xs text-muted-foreground mt-1">Pro features fully unlocked</div>
+                    </div>
+                )}
+            </CardContent>
+            {subscription.tier !== 'pro' && (
+                <CardFooter className="p-4 bg-muted/50">
+                    <ul className="text-xs space-y-1.5">
+                        {subscription.tier === 'free' ? (
+                            <>
+                                <li className="flex items-center">
+                                    <CheckIcon className="h-3 w-3 mr-2 text-blue-500" />
+                                    Upgrade for retry attempts
+                                </li>
+                                <li className="flex items-center">
+                                    <CheckIcon className="h-3 w-3 mr-2 text-blue-500" />
+                                    Detailed feedback analysis
+                                </li>
+                            </>
+                        ) : (
+                            <>
+                                <li className="flex items-center">
+                                    <CheckIcon className="h-3 w-3 mr-2 text-indigo-500" />
+                                    Unlimited interviews
+                                </li>
+                                <li className="flex items-center">
+                                    <CheckIcon className="h-3 w-3 mr-2 text-indigo-500" />
+                                    Interpersonal traits assessment
+                                </li>
+                            </>
+                        )}
+                    </ul>
+                </CardFooter>
+            )}
+        </Card>
+    );
+}

@@ -115,11 +115,11 @@ export default function DashboardSidebar() {
                 animate={isCollapsed ? "collapsed" : "expanded"}
                 variants={sidebarVariants}
                 transition={{ type: "spring", stiffness: 300, damping: 30 }}
-                className="fixed left-0 top-0 z-40 h-full bg-black text-white border-r border-gray-800 flex flex-col"
+                className="fixed left-0 top-0 z-40 h-full bg-background text-white border-r flex flex-col"
                 data-testid="dashboard-sidebar"
             >
                 {/* Sidebar Header */}
-                <div className="border-b border-gray-800 p-4">
+                <div className="border-b p-4">
                     <div className="flex items-center justify-between">
                         {isCollapsed ? (
                             <Tooltip>
@@ -249,7 +249,7 @@ export default function DashboardSidebar() {
                 </div>
 
                 {/* Sidebar Footer with SignOutButton */}
-                <div className="border-t border-gray-800 p-4">
+                <div className="border-t p-4">
                     <motion.div
                         whileHover={{ x: 4 }}
                         transition={{ type: "spring", stiffness: 400, damping: 20 }}
@@ -278,7 +278,7 @@ export default function DashboardSidebar() {
                                 size="sm"
                                 showIcon={true}
                                 hideText={false}
-                                className="w-full justify-start text-gray-400 hover:text-white hover:bg-gray-800"
+                                className="w-full justify-start text-gray-400 hover:text-white hover:bg-gray-900"
                                 data-testid="signout-button"
                             />
                         )}
