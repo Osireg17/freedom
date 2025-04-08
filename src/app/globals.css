@@ -117,7 +117,47 @@
     * {
         @apply border-border outline-ring/50;
     }
+
     body {
         @apply bg-background text-foreground;
+    }
+}
+
+/* Add to your globals.css or create a new styles/sidebar.css file */
+
+:root {
+    /* Default sidebar width (expanded state) */
+    --sidebar-width: 256px;
+}
+
+/* CSS classes that will be toggled by the sidebar component */
+html.sidebar-collapsed {
+    --sidebar-width: 64px;
+}
+
+html.sidebar-expanded {
+    --sidebar-width: 256px;
+}
+
+/* Ensure the main content has proper transitions */
+[data-testid="dashboard-content"] {
+    transition: margin-left 0.3s ease;
+}
+
+/* Ensure the sidebar has proper transitions */
+[data-testid="dashboard-sidebar"] {
+    transition: width 0.3s ease;
+}
+
+/* Responsive adjustments for mobile */
+@media (max-width: 768px) {
+    :root {
+        --sidebar-width: 0px;
+        /* Default to hidden on mobile */
+    }
+
+    html.sidebar-expanded {
+        --sidebar-width: 256px;
+        /* Take full width when expanded on mobile */
     }
 }
