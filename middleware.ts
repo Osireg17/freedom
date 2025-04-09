@@ -1,9 +1,5 @@
-// src/middleware.ts
-// Updated to include route protection checks in middleware
-
-import { logger } from "@/lib/axiom/server";
+// src/middleware.ts - adjust the middleware to check for completed profiles
 import { updateSupabaseSession } from "@/lib/supabase/middleware";
-import { transformMiddlewareRequest } from "@axiomhq/nextjs";
 import { NextResponse } from "next/server";
 import type { NextFetchEvent, NextRequest } from "next/server";
 import { createServerClient } from '@supabase/ssr';
@@ -17,9 +13,6 @@ const protectedRoutes = [
 export async function middleware(request: NextRequest, event: NextFetchEvent) {
   // First, handle Supabase auth session refresh
   const authResponse = await updateSupabaseSession(request);
-  
-  // Log request information to Axiom
-  logger.info(...transformMiddlewareRequest(request));
   
   // Check if the path is a protected route
   const path = request.nextUrl.pathname;
@@ -54,9 +47,6 @@ export async function middleware(request: NextRequest, event: NextFetchEvent) {
       return NextResponse.redirect(redirectUrl);
     }
   }
-  
-  // Ensure logs are flushed before the response
-  event.waitUntil(logger.flush());
   
   // If we have a modified response from auth session update, return it
   if (authResponse) {

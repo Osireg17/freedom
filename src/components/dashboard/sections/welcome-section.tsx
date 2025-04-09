@@ -5,6 +5,7 @@ import { Award } from 'lucide-react';
 
 interface WelcomeSectionProps {
     firstName: string;
+    lastName: string;
     stats: {
         completedInterviews: number;
         inProgressInterviews: number;
@@ -13,12 +14,12 @@ interface WelcomeSectionProps {
     streakCount: number;
 }
 
-export function WelcomeSection({ firstName, stats, streakCount }: WelcomeSectionProps) {
+export function WelcomeSection({ firstName, lastName, stats, streakCount }: WelcomeSectionProps) {
 
     return (
         <div className="space-y-3" data-testid="welcome-section">
             <h1 className="text-3xl font-bold tracking-tight">
-                Welcome back, {firstName}
+                Welcome back, {firstName} {lastName && ` ${lastName}`}!
             </h1>
             <div className="flex flex-wrap gap-4 items-center">
                 <p className="text-muted-foreground text-lg">

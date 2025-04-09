@@ -101,7 +101,9 @@ const MOCK_DATA = {
 
 
 export default function DashboardContent({ user, children }: DashboardContentProps) {
-    const firstName = user.user_metadata?.firstName || 'there';
+    const firstName = user.user_metadata?.first_name || 'User';
+    const lastName = user.user_metadata?.last_name || 'User';
+
 
     // If there are children, render them instead of the default dashboard
     if (children) {
@@ -113,6 +115,7 @@ export default function DashboardContent({ user, children }: DashboardContentPro
             {/* Welcome Section with User Stats */}
             <WelcomeSection
                 firstName={firstName}
+                lastName={lastName}
                 stats={MOCK_DATA.stats}
                 streakCount={MOCK_DATA.streakCount}
             />
