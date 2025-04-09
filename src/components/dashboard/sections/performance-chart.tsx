@@ -1,6 +1,6 @@
-
-// src/components/dashboard/recent-performance-chart.tsx
+// src/components/dashboard/sections/performance-chart.tsx
 'use client';
+
 import { Line } from 'react-chartjs-2';
 import {
     Chart as ChartJS,
@@ -13,6 +13,7 @@ import {
     Legend,
     Filler
 } from 'chart.js';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 
 // Register the required chart.js components
 ChartJS.register(
@@ -26,11 +27,17 @@ ChartJS.register(
     Filler
 );
 
-interface RecentPerformanceChartProps {
+interface PerformanceChartProps {
     data: number[];
 }
 
-export function RecentPerformanceChart({ data }: RecentPerformanceChartProps) {
+export function PerformanceChart({ data }: PerformanceChartProps) {
+    // Calculate average score
+    const averageScore = Math.round(data.reduce((sum, score) => sum + score, 0) / data.length);
+
+    // Calculate improvement percentage (compare last value to first value)
+    const improvementPercentage = Math.round(((data[data.length - 1] - data[0]) / data[0]) * 100);
+
     // Get the last n entries, with labels as "n days ago", etc.
     const chartData = {
         labels: data.map((_, index) => index === 0 ? 'Today' :
@@ -76,6 +83,7 @@ export function RecentPerformanceChart({ data }: RecentPerformanceChartProps) {
                     size: 14,
                 },
                 callbacks: {
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
                     label: function (context: any) {
                         return `Score: ${context.raw}%`;
                     }
@@ -85,8 +93,30 @@ export function RecentPerformanceChart({ data }: RecentPerformanceChartProps) {
     };
 
     return (
-        <div className="w-full h-80" data-testid="performance-chart">
-            <Line data={chartData} options={options} />
-        </div>
+        <Card className="w-full" data-testid="performance-chart-card">
+            <CardHeader className="flex flex-row items-center justify-between">
+                <div>
+                    <CardTitle>Performance Trend</CardTitle>
+                    <CardDescription>Your interview scores over time</CardDescription>
+                </div>
+                <div className="flex items-center gap-4">
+                    <div className="text-center">
+                        <p className="text-sm text-muted-foreground">Average</p>
+                        <p className="text-xl font-bold">{averageScore}%</p>
+                    </div>
+                    <div className="text-center">
+                        <p className="text-sm text-muted-foreground">Improvement</p>
+                        <p className={`text-xl font-bold ${improvementPercentage >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                            {improvementPercentage >= 0 ? '+' : ''}{improvementPercentage}%
+                        </p>
+                    </div>
+                </div>
+            </CardHeader>
+            <CardContent>
+                <div className="h-80" data-testid="performance-chart">
+                    <Line data={chartData} options={options} />
+                </div>
+            </CardContent>
+        </Card>
     );
 }

@@ -1,7 +1,7 @@
-// src/components/dashboard/daily-challenge.tsx
+// src/components/dashboard/panels/daily-challenge.tsx
 'use client';
 
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Lightbulb, Clock } from "lucide-react";
 
@@ -15,24 +15,24 @@ export function DailyChallenge() {
 
     return (
         <Card data-testid="daily-challenge-card">
-            <CardHeader className="pb-2">
+            <CardHeader>
                 <div className="flex items-center justify-between">
                     <CardTitle className="text-base">Daily Challenge</CardTitle>
-                    <div className="bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-300 px-2 py-0.5 rounded text-xs font-medium">
+                    <div className="bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300 px-2 py-0.5 rounded text-xs font-medium">
                         New
                     </div>
                 </div>
                 <CardDescription>Practice one question each day</CardDescription>
             </CardHeader>
 
-            <CardContent className="space-y-4">
-                <div className="rounded-lg border p-3 bg-muted/50">
-                    <div className="flex items-start gap-2 mb-2">
-                        <Lightbulb className="h-4 w-4 text-amber-500 mt-0.5 flex-shrink-0" />
+            <CardContent className="space-y-5">
+                <div className="rounded-lg border p-4 bg-muted/50">
+                    <div className="flex items-start gap-3 mb-3">
+                        <Lightbulb className="h-5 w-5 text-amber-500 mt-0.5 flex-shrink-0" />
                         <p className="text-sm">{dailyQuestion.question}</p>
                     </div>
 
-                    <div className="flex items-center text-xs text-muted-foreground mt-2">
+                    <div className="flex items-center text-xs text-muted-foreground mt-3">
                         <span className="bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded mr-2">
                             {dailyQuestion.category}
                         </span>
@@ -43,7 +43,6 @@ export function DailyChallenge() {
 
                 <Button
                     className="w-full"
-                    variant="secondary"
                     data-testid="attempt-challenge-button"
                     aria-label="Attempt today's challenge question"
                 >
