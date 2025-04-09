@@ -1,3 +1,4 @@
+// src/components/dashboard/panels/subscription-panel.tsx
 'use client';
 
 import { CrownIcon, CheckIcon } from 'lucide-react';
@@ -5,7 +6,7 @@ import { Card, CardHeader, CardTitle, CardContent, CardFooter } from '@/componen
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 
-interface SubscriptionBannerProps {
+interface SubscriptionPanelProps {
     subscription: {
         tier: string;
         interviewsRemaining: number;
@@ -13,7 +14,7 @@ interface SubscriptionBannerProps {
     };
 }
 
-export function SubscriptionBanner({ subscription }: SubscriptionBannerProps) {
+export function SubscriptionPanel({ subscription }: SubscriptionPanelProps) {
     const nextReset = new Date(subscription.nextReset);
     const formattedReset = nextReset.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 
@@ -22,14 +23,18 @@ export function SubscriptionBanner({ subscription }: SubscriptionBannerProps) {
     const progressPercentage = totalInterviews === Infinity ? 0 : (interviewsUsed / totalInterviews) * 100;
 
     return (
-        <Card className="overflow-hidden" data-testid="subscription-banner">
-            <CardHeader className="p-4">
-                <CardTitle className="text-sm font-medium uppercase">{subscription.tier} Plan</CardTitle>
+        <Card className="overflow-hidden" data-testid="subscription-panel">
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <CardTitle className="text-sm font-semibold uppercase">
+                    {subscription.tier === 'free' ? 'Free Plan' :
+                        subscription.tier === 'standard' ? 'Standard Plan' :
+                            'Pro Plan'}
+                </CardTitle>
                 {subscription.tier !== 'pro' && (
                     <Button
                         variant="outline"
                         size="sm"
-                        className="border-primary text-primary bg-white hover:bg-primary/10"
+                        className="border-primary text-primary bg-white hover:bg-primary/10 dark:bg-transparent dark:hover:bg-primary/20"
                         data-testid="upgrade-button"
                         aria-label="Upgrade your subscription"
                     >
@@ -52,23 +57,28 @@ export function SubscriptionBanner({ subscription }: SubscriptionBannerProps) {
                     </>
                 ) : (
                     <div className="py-2">
-                        <div className="text-sm">Unlimited interviews available</div>
-                        <div className="text-xs text-muted-foreground mt-1">Pro features fully unlocked</div>
+                        <div className="text-sm font-medium">Unlimited interviews available</div>
+                        <div className="text-xs text-muted-foreground mt-1">All pro features unlocked</div>
                     </div>
                 )}
             </CardContent>
             {subscription.tier !== 'pro' && (
-                <CardFooter className="p-4 bg-muted/50">
-                    <ul className="text-xs space-y-1.5">
+                <CardFooter className="p-4 bg-muted/50 flex flex-col items-start">
+                    <h4 className="text-xs font-medium mb-2">Upgrade to get more features:</h4>
+                    <ul className="text-xs space-y-1.5 w-full">
                         {subscription.tier === 'free' ? (
                             <>
                                 <li className="flex items-center">
                                     <CheckIcon className="h-3 w-3 mr-2 text-blue-500" />
-                                    Upgrade for retry attempts
+                                    Retry attempts for better practice
                                 </li>
                                 <li className="flex items-center">
                                     <CheckIcon className="h-3 w-3 mr-2 text-blue-500" />
-                                    Detailed feedback analysis
+                                    Detailed STAR method feedback
+                                </li>
+                                <li className="flex items-center">
+                                    <CheckIcon className="h-3 w-3 mr-2 text-blue-500" />
+                                    Basic speech metrics analysis
                                 </li>
                             </>
                         ) : (
@@ -76,6 +86,10 @@ export function SubscriptionBanner({ subscription }: SubscriptionBannerProps) {
                                 <li className="flex items-center">
                                     <CheckIcon className="h-3 w-3 mr-2 text-indigo-500" />
                                     Unlimited interviews
+                                </li>
+                                <li className="flex items-center">
+                                    <CheckIcon className="h-3 w-3 mr-2 text-indigo-500" />
+                                    Advanced speech pattern analysis
                                 </li>
                                 <li className="flex items-center">
                                     <CheckIcon className="h-3 w-3 mr-2 text-indigo-500" />
