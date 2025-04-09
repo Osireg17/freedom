@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server';
 import { type EmailOtpType } from '@supabase/supabase-js';
 import { type NextRequest, NextResponse } from 'next/server';
 import { logServerError } from '@/lib/error/logger';
+import { createUserRecord } from '@/lib/actions/auth-actions';
 
 /**
  * Route handler for authentication callbacks from Supabase
@@ -38,15 +39,32 @@ export async function GET(request: NextRequest) {
       
       // Update the user metadata to reflect email confirmation
       if (userData?.user) {
+        // Update email confirmation status
         await supabase.auth.updateUser({
           data: { email_confirmed: true }
         });
-      }
-      
-      // For new users after signup or users who haven't completed their profile yet
-      if (type === 'signup' || type === 'email') {
-        console.log("Redirecting to complete profile after email verification");
-        return NextResponse.redirect(new URL('/complete-profile', request.url));
+        
+        // Check if we have first_name and last_name in metadata
+        const firstName = userData.user.user_metadata?.first_name;
+        const lastName = userData.user.user_metadata?.last_name;
+        
+        if (firstName && lastName) {
+          // Create user record in our database using the auth-actions function
+          try {
+            await createUserRecord(
+              userData.user.id,
+              userData.user.email || '',
+              firstName,
+              lastName
+            );
+          } catch (createUserError) {
+            logServerError(
+              createUserError instanceof Error ? createUserError : new Error('Unknown error creating user record'),
+              { action: 'authCallback' }
+            );
+            // Even if this fails, we continue with the flow
+          }
+        }
       }
       
       // For password reset, redirect to reset-password page to set new password
@@ -54,31 +72,22 @@ export async function GET(request: NextRequest) {
         return NextResponse.redirect(new URL('/reset-password', request.url));
       }
       
-      // For any other verification types, check if they should go to complete-profile
-      // or dashboard based on whether they've completed their profile
-      if (userData?.user) {
-        // If user hasn't completed their profile (no firstName in metadata)
-        // redirect them to complete-profile
-        if (!userData.user.user_metadata?.firstName) {
-          return NextResponse.redirect(new URL('/complete-profile', request.url));
-        }
-        
-        // Otherwise, redirect to dashboard
+      // After successful signup and email verification, go directly to dashboard
+      if (type === 'signup' || type === 'email') {
         return NextResponse.redirect(new URL('/dashboard', request.url));
       }
       
-      // Default fallback for verification success but no specific path
-      return NextResponse.redirect(new URL('/complete-profile', request.url));
+      // For any other verification types, redirect to dashboard
+      return NextResponse.redirect(new URL('/dashboard', request.url));
     }
     
     // This is likely a callback from an OAuth provider
-    // For OAuth, also check if they need to complete their profile and have confirmed email
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
     
     if (user) {
-      // Check if email is confirmed before allowing access to complete-profile
-      const isEmailConfirmed = user.user_metadata?.email_confirmed === true;
+      // Check if email is confirmed before allowing access
+      const isEmailConfirmed = user.email_confirmed_at || user.user_metadata?.email_confirmed === true;
       
       if (!isEmailConfirmed) {
         // If email is not confirmed, redirect to a page asking them to confirm email first
@@ -87,9 +96,29 @@ export async function GET(request: NextRequest) {
         );
       }
       
-      if (!user.user_metadata?.firstName) {
-        // Email confirmed and profile not complete, redirect to complete-profile
-        return NextResponse.redirect(new URL('/complete-profile', request.url));
+      // Check if we need to create user profile
+      const firstName = user.user_metadata?.first_name;
+      const lastName = user.user_metadata?.last_name;
+      
+      if (firstName && lastName) {
+        // Create user record if missing
+        try {
+          await createUserRecord(
+            user.id,
+            user.email || '',
+            firstName,
+            lastName
+          );
+        } catch (createUserError) {
+          logServerError(
+            createUserError instanceof Error ? createUserError : new Error('Unknown error creating user record'),
+            { action: 'authCallback' }
+          );
+          // Even if this fails, we continue with the flow
+        }
+        
+        // Redirect to dashboard
+        return NextResponse.redirect(new URL('/dashboard', request.url));
       }
     }
     
