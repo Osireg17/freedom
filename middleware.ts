@@ -1,18 +1,19 @@
 // src/middleware.ts - adjust the middleware to check for completed profiles
 import { updateSupabaseSession } from "@/lib/supabase/middleware";
 import { NextResponse } from "next/server";
-import type { NextFetchEvent, NextRequest } from "next/server";
+import type {NextRequest } from "next/server";
 import { createServerClient } from '@supabase/ssr';
 
 // Protected routes that require authentication
 const protectedRoutes = [
   '/dashboard',
-  '/dashboard/'
+  '/dashboard/',
+  'dashboard/interviews',
 ];
 
-export async function middleware(request: NextRequest, event: NextFetchEvent) {
+export async function middleware(request: NextRequest) {
   // First, handle Supabase auth session refresh
-  const authResponse = await updateSupabaseSession(request);
+  const authResponse = await updateSupabaseSession();
   
   // Check if the path is a protected route
   const path = request.nextUrl.pathname;
