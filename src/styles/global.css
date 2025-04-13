@@ -1,28 +1,8 @@
-/* Add this to your globals.css */
-:root {
-    --sidebar-width: 64px;
-}
-
-.sidebar-expanded {
-    --sidebar-width: 256px;
-}
-
-.sidebar-collapsed {
-    --sidebar-width: 64px;
-}
-
-/* For responsive behavior */
+/* src/styles/global.css - Removed sidebar-related styles */
+/* Add global styles here */
 @media (max-width: 767px) {
-    .sidebar-container {
-        position: absolute;
-        z-index: 50;
-    }
-
-    .sidebar-overlay {
-        position: fixed;
-        inset: 0;
-        background-color: rgba(0, 0, 0, 0.5);
-        z-index: 40;
-        transition: opacity 0.3s ease;
+    .responsive-container {
+        padding-left: 1rem;
+        padding-right: 1rem;
     }
 }

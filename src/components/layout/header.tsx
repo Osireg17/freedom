@@ -8,15 +8,25 @@ import { Button } from '@/components/ui/button';
 import { Menu, X } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { User } from '@supabase/supabase-js';
+import { AuthenticatedNavigation } from './auth-navigation';
+import { useMediaQuery } from '@/hooks/use-media-query';
 
 export function Header() {
     const [isMenuOpen, setIsMenuOpen] = useState(false);
     const [user, setUser] = useState<User | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const pathname = usePathname();
+    const isMobile = useMediaQuery("(max-width: 1024px)");
 
-    // Don't render header on dashboard pages
-    const isDashboardPage = pathname && pathname.startsWith('/dashboard');
+    // Don't render header on error pages
+    const isErrorPage = pathname && pathname.startsWith('/error');
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const isDashboardPathname = pathname &&
+        (pathname.startsWith('/dashboard') ||
+            pathname.startsWith('/interviews') ||
+            pathname.startsWith('/analytics') ||
+            pathname.startsWith('/profile') ||
+            pathname.startsWith('/settings'));
 
     useEffect(() => {
         async function getUser() {
@@ -35,8 +45,12 @@ export function Header() {
         getUser();
     }, []);
 
-    // Don't render header on dashboard pages
-    if (isDashboardPage) return null;
+    // Close mobile menu when route changes
+    useEffect(() => {
+        setIsMenuOpen(false);
+    }, [pathname]);
+
+    if (isErrorPage) return null;
 
     return (
         <header
@@ -55,83 +69,80 @@ export function Header() {
                     </Link>
                 </div>
 
-                {/* Desktop Navigation */}
-                <nav className="hidden md:flex items-center gap-6" aria-label="Main navigation">
-                    <Link
-                        href="/features"
-                        className="text-sm font-medium hover:text-primary transition-colors"
-                        data-testid="header-nav-features"
-                    >
-                        Features
-                    </Link>
-                    <Link
-                        href="/pricing"
-                        className="text-sm font-medium hover:text-primary transition-colors"
-                        data-testid="header-nav-pricing"
-                    >
-                        Pricing
-                    </Link>
-                    <Link
-                        href="/contact"
-                        className="text-sm font-medium hover:text-primary transition-colors"
-                        data-testid="header-nav-contact"
-                    >
-                        Contact
-                    </Link>
-                </nav>
+                {!isLoading && user ? (
+                    <AuthenticatedNavigation
+                        username={user.user_metadata?.first_name}
+                        isMobile={isMobile}
+                    />
+                ) : (
+                    <>
+                        {/* Default navigation for non-authenticated users */}
+                        {/* Desktop Navigation */}
+                        <nav className="hidden md:flex items-center gap-6" aria-label="Main navigation">
+                            <Link
+                                href="/features"
+                                className="text-sm font-medium hover:text-primary transition-colors"
+                                data-testid="header-nav-features"
+                            >
+                                Features
+                            </Link>
+                            <Link
+                                href="/pricing"
+                                className="text-sm font-medium hover:text-primary transition-colors"
+                                data-testid="header-nav-pricing"
+                            >
+                                Pricing
+                            </Link>
+                            <Link
+                                href="/contact"
+                                className="text-sm font-medium hover:text-primary transition-colors"
+                                data-testid="header-nav-contact"
+                            >
+                                Contact
+                            </Link>
+                        </nav>
 
-                {/* Authentication Buttons - Desktop */}
-                <div className="hidden md:flex items-center gap-4">
-                    {!isLoading && (
-                        user ? (
-                            <>
-                                <Button
-                                    size="sm"
-                                    asChild
-                                    data-testid="header-dashboard-button"
-                                    aria-label="Go to dashboard"
-                                >
-                                    <Link href="/dashboard">Dashboard</Link>
-                                </Button>
-                            </>
-                        ) : (
-                            <>
-                                <Button
-                                    variant="outline"
-                                    size="sm"
-                                    asChild
-                                    data-testid="header-signin-button"
-                                    aria-label="Sign in to your account"
-                                >
-                                    <Link href="/sign-in">Sign In</Link>
-                                </Button>
-                                <Button
-                                    size="sm"
-                                    asChild
-                                    data-testid="header-signup-button"
-                                    aria-label="Create a new account"
-                                >
-                                    <Link href="/sign-up">Sign Up</Link>
-                                </Button>
-                            </>
-                        )
-                    )}
-                </div>
+                        {/* Authentication Buttons - Desktop */}
+                        <div className="hidden md:flex items-center gap-4">
+                            {!isLoading && (
+                                <>
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        asChild
+                                        data-testid="header-signin-button"
+                                        aria-label="Sign in to your account"
+                                    >
+                                        <Link href="/sign-in">Sign In</Link>
+                                    </Button>
+                                    <Button
+                                        size="sm"
+                                        asChild
+                                        data-testid="header-signup-button"
+                                        aria-label="Create a new account"
+                                    >
+                                        <Link href="/sign-up">Sign Up</Link>
+                                    </Button>
+                                </>
+                            )}
+                        </div>
 
-                {/* Mobile Menu Button */}
-                <button
-                    className="flex md:hidden"
-                    onClick={() => setIsMenuOpen(!isMenuOpen)}
-                    aria-expanded={isMenuOpen}
-                    aria-label={isMenuOpen ? 'Close menu' : 'Open menu'}
-                    data-testid="header-mobile-menu-button"
-                >
-                    {isMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
-                </button>
+                        {/* Mobile Menu Button */}
+                        <button
+                            className="flex md:hidden"
+                            onClick={() => setIsMenuOpen(!isMenuOpen)}
+                            aria-expanded={isMenuOpen}
+                            aria-label={isMenuOpen ? 'Close menu' : 'Open menu'}
+                            data-testid="header-mobile-menu-button"
+                        >
+                            {isMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
+                        </button>
+                    </>
+                )}
             </div>
 
-            {/* Mobile Menu */}
-            {isMenuOpen && (
+            {/* Mobile Menu - Only for non-authenticated users */}
+            {isMenuOpen && !user && (
                 <div
                     className="container mx-auto md:hidden pb-4 px-4"
                     data-testid="header-mobile-menu"
@@ -163,36 +174,25 @@ export function Header() {
                         </Link>
                         <div className="flex flex-col space-y-2 pt-2">
                             {!isLoading && (
-                                user ? (
+                                <>
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        asChild
+                                        data-testid="header-mobile-signin-button"
+                                        onClick={() => setIsMenuOpen(false)}
+                                    >
+                                        <Link href="/sign-in">Sign In</Link>
+                                    </Button>
                                     <Button
                                         size="sm"
                                         asChild
-                                        data-testid="header-mobile-dashboard-button"
+                                        data-testid="header-mobile-signup-button"
                                         onClick={() => setIsMenuOpen(false)}
                                     >
-                                        <Link href="/dashboard">Dashboard</Link>
+                                        <Link href="/sign-up">Sign Up</Link>
                                     </Button>
-                                ) : (
-                                    <>
-                                        <Button
-                                            variant="outline"
-                                            size="sm"
-                                            asChild
-                                            data-testid="header-mobile-signin-button"
-                                            onClick={() => setIsMenuOpen(false)}
-                                        >
-                                            <Link href="/sign-in">Sign In</Link>
-                                        </Button>
-                                        <Button
-                                            size="sm"
-                                            asChild
-                                            data-testid="header-mobile-signup-button"
-                                            onClick={() => setIsMenuOpen(false)}
-                                        >
-                                            <Link href="/sign-up">Sign Up</Link>
-                                        </Button>
-                                    </>
-                                )
+                                </>
                             )}
                         </div>
                     </nav>
