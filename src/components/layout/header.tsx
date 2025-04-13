@@ -6,10 +6,10 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Menu, X } from 'lucide-react';
-import { createClient } from '@/lib/supabase/client';
 import { User } from '@supabase/supabase-js';
 import { AuthenticatedNavigation } from './auth-navigation';
 import { useMediaQuery } from '@/hooks/use-media-query';
+import { getCurrentUser } from '@/lib/actions/auth-actions';
 
 export function Header() {
     const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -32,8 +32,7 @@ export function Header() {
         async function getUser() {
             setIsLoading(true);
             try {
-                const supabase = createClient();
-                const { data: { user } } = await supabase.auth.getUser();
+                const user = await getCurrentUser();
                 setUser(user);
             } catch (error) {
                 console.error('Error getting user:', error);
