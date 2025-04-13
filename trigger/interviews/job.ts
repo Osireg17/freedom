@@ -4,8 +4,10 @@ import { interviews, interviewQuestions } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
 import OpenAI from 'openai';
 import { schemaTask, logger, configure } from '@trigger.dev/sdk/v3';
-import { createId } from '@paralleldrive/cuid2';
+import { v4 as uuidv4 } from 'uuid';
 import { z } from 'zod';
+const client = new OpenAI();
+
 
 // Configure Trigger.dev
 configure({
@@ -38,8 +40,8 @@ type JobInterviewPayload = z.infer<typeof JobInterviewPayloadSchema>;
 
 interface GeneratedQuestion {
   question: string;
-  area: string;
-  context: string;
+  category: string;
+  type: 'behavioral' | 'technical';
 }
 
 interface TaskResult {
@@ -153,8 +155,9 @@ function generateInterviewPrompt(payload: JobInterviewPayload): string {
 // Helper function to generate questions with OpenAI
 async function generateQuestionsWithOpenAI(prompt: string): Promise<GeneratedQuestion[]> {
   try {
-    const completion = await openai.chat.completions.create({
-      model: "gpt-4o",
+    const completion = await client.chat.completions.create({
+      model: "gpt-4o-mini-search-preview",
+      web_search_options: {},
       messages: [
         {
           role: "system",
@@ -218,12 +221,11 @@ async function storeInterviewQuestions(interviewId: string, questions: Generated
     const question = questions[i];
     
     await db.insert(interviewQuestions).values({
-      id: createId(),
+      id: uuidv4(),
       interviewId,
       questionNumber: i + 1,
       questionText: question.question,
-      questionType: 'behavioral', // Could be dynamic based on question.area
-      // Additional metadata could be stored in a separate table or as JSON
+      questionType: question.type,
     });
   }
 }
