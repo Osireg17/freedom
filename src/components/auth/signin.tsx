@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { z } from 'zod';
 import { useForm } from 'react-hook-form';
@@ -31,7 +31,6 @@ const signInSchema = z.object({
 type SignInFormValues = z.infer<typeof signInSchema>;
 
 export default function SignIn() {
-    const router = useRouter();
     const searchParams = useSearchParams();
     const [isLoading, setIsLoading] = useState(false);
     const { logError } = useErrorLogging();
@@ -89,9 +88,11 @@ export default function SignIn() {
                 return;
             }
 
-            // Redirect the user after successful sign-in
-            router.push(redirectTo);
-            router.refresh(); // Refresh the page to update the session
+            // Show success message
+            toast.success('Signed in successfully');
+
+            // Use a hard navigation to ensure all auth state is properly refreshed
+            window.location.href = redirectTo;
         } catch (error) {
             logError(error, { action: 'signIn' });
             toast.error('An error occurred during sign in. Please try again.');

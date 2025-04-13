@@ -95,8 +95,10 @@ export default function SignUp() {
                 return;
             }
 
+            // Success - redirect to verification page
             if (data?.user) {
-                // Success! Redirect to verify email page
+                toast.success('Account created successfully! Please verify your email.');
+                // Use the router to navigate to the verification page
                 router.push(`/verify-email?email=${encodeURIComponent(values.email)}&type=signup`);
             }
         } catch (error) {
