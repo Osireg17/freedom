@@ -17,7 +17,7 @@ export default async function DashboardLayout({
 
     // The container is minimal now as the actual layout is handled by the DashboardLayout component
     return (
-        <div data-testid="dashboard-container">
+        <div className='container py-8 max-w-4xl mx-auto' data-testid="dashboard-container">
             {children}
         </div>
     );
