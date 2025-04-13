@@ -8,7 +8,7 @@ import { createServerClient } from '@supabase/ssr';
 const protectedRoutes = [
   '/dashboard',
   '/dashboard/',
-  'dashboard/interviews',
+  '/interviews/',
 ];
 
 export async function middleware(request: NextRequest) {
