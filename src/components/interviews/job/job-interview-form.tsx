@@ -14,6 +14,12 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useErrorLogging } from '@/hooks/use-error-logging';
 import { Progress } from '@/components/ui/progress';
+import { toast } from 'sonner';
+
+// Helper function to count words
+const countWords = (str: string) => {
+    return str.trim() === '' ? 0 : str.trim().split(/\s+/).length;
+};
 
 // Define the form validation schema
 const jobInterviewSchema = z.object({
@@ -23,9 +29,13 @@ const jobInterviewSchema = z.object({
     companyName: z.string().min(2, {
         message: "Company name must be at least 2 characters."
     }),
-    jobDescription: z.string().min(50, {
-        message: "Please provide a detailed job description (at least 50 characters) for better question generation."
-    }),
+    jobDescription: z.string().min(1)
+        .refine(val => countWords(val) >= 50, {
+            message: "Please provide a detailed job description (at least 50 words) for better question generation."
+        })
+        .refine(val => countWords(val) <= 250, {
+            message: "Job description should not exceed 250 words for optimal question generation."
+        }),
     yearsExperience: z.string().refine((val) => !isNaN(Number(val)), {
         message: "Please enter a valid number for years of experience."
     }),
@@ -79,38 +89,83 @@ export default function JobInterviewForm() {
         updateProgress();
     });
 
-    // Handle form submission
     async function onSubmit(values: JobInterviewFormValues) {
         setIsSubmitting(true);
+        setFormProgress(30);
 
         try {
-            // Here we would make an API call to create the interview
-            console.log("Form values:", values);
+            // Make API call to create the interview
+            const response = await fetch('/api/interviews/job', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(values),
+            });
 
-            // Simulate API call with progressive loading
-            await new Promise(resolve => setTimeout(resolve, 500));
-            setFormProgress(70);
-            await new Promise(resolve => setTimeout(resolve, 500));
-            setFormProgress(90);
-            await new Promise(resolve => setTimeout(resolve, 500));
+            setFormProgress(60);
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error?.message || 'Failed to create interview');
+            }
+
+            const data = await response.json();
+
+            // Update progress indicators
+            setFormProgress(80);
+            await new Promise(resolve => setTimeout(resolve, 300));
             setFormProgress(100);
 
-            // Redirect to interviews page or newly created interview
-            router.push('/dashboard/interviews');
+            // Show success toast
+            toast.success(
+                "Interview created successfully! Questions are being generated. You will be notified when they are ready.",
+                {
+                    duration: 5000,
+                    description: "You can check the status of your interview in the dashboard.",
+                }
+            );
+            // Redirect to the interviews dashboard with the new interview ID
+            router.push(`/dashboard/interviews?interviewId=${data.interviewId}&status=processing`);
         } catch (error) {
+            // Log error for debugging
             logError(error, {
                 context: 'JobInterviewForm.onSubmit',
                 formValues: values,
             });
+
+            // Show error toast to user
+            toast.error(
+                error instanceof Error ? error.message : 'An unexpected error occurred. Please try again.'
+            );
+
+            // Reset progress
+            setFormProgress(0);
         } finally {
             setIsSubmitting(false);
         }
     }
 
-    // Get character count for job description
-    const jobDescriptionLength = form.watch('jobDescription')?.length || 0;
-    const jobDescriptionMinLength = 250;
-    const jobDescriptionColor = jobDescriptionLength < jobDescriptionMinLength ? 'text-destructive' : 'text-green-600';
+    // Get word count for job description
+    const jobDescriptionText = form.watch('jobDescription') || '';
+    const jobDescriptionWordCount = countWords(jobDescriptionText);
+    const jobDescriptionMinWords = 50;
+    const jobDescriptionMaxWords = 250;
+
+    // Determine status and colors
+    const isBelowMin = jobDescriptionWordCount < jobDescriptionMinWords;
+    const isAboveMax = jobDescriptionWordCount > jobDescriptionMaxWords;
+    const isValid = !isBelowMin && !isAboveMax;
+
+    const counterColor = isAboveMax
+        ? 'text-destructive'
+        : isBelowMin
+            ? 'text-yellow-500'
+            : 'text-green-600';
+
+    const counterText = isAboveMax
+        ? `${jobDescriptionWordCount} (max ${jobDescriptionMaxWords})`
+        : `${jobDescriptionWordCount}/${jobDescriptionMaxWords}`;
 
     return (
         <>
@@ -191,13 +246,20 @@ export default function JobInterviewForm() {
                                             {...field}
                                             data-testid="job-description-textarea"
                                         />
-                                        <div className={`absolute bottom-2 right-2 text-xs font-medium ${jobDescriptionColor}`}>
-                                            {jobDescriptionLength}/{jobDescriptionMinLength}
+                                        <div className="absolute bottom-2 right-2 flex flex-col items-end">
+                                            <span className={`text-xs font-medium ${counterColor}`}>
+                                                {counterText} words
+                                            </span>
+                                            {isAboveMax && (
+                                                <span className="text-xs text-destructive">
+                                                    Maximum {jobDescriptionMaxWords} words allowed
+                                                </span>
+                                            )}
                                         </div>
                                     </div>
                                 </FormControl>
                                 <FormDescription>
-                                    Include responsibilities, requirements, and qualifications for more accurate questions
+                                    Include responsibilities, requirements, and qualifications (50-250 words)
                                 </FormDescription>
                                 <FormMessage />
                             </FormItem>
@@ -323,7 +385,7 @@ export default function JobInterviewForm() {
                     <Button
                         type="submit"
                         className="w-full py-6 text-lg mt-8 relative overflow-hidden group"
-                        disabled={isSubmitting}
+                        disabled={isSubmitting || !isValid}
                         data-testid="generate-interview-button"
                     >
                         <span className="relative z-10 flex items-center justify-center">
