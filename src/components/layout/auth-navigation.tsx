@@ -12,6 +12,10 @@ import {
     BarChart,
     UserCircle,
     Settings,
+    ChevronDown,
+    Briefcase,
+    BookText,
+    ListChecks,
 } from 'lucide-react';
 import {
     DropdownMenu,
@@ -20,7 +24,9 @@ import {
     DropdownMenuLabel,
     DropdownMenuSeparator,
     DropdownMenuTrigger,
+    DropdownMenuGroup,
 } from '@/components/ui/dropdown-menu';
+import { Badge } from '@/components/ui/badge';
 
 const navItems = [
     {
@@ -28,12 +34,6 @@ const navItems = [
         href: '/dashboard',
         icon: Home,
         testId: 'nav-item-dashboard',
-    },
-    {
-        name: 'Practice Interviews',
-        href: '/interviews',
-        icon: FileText,
-        testId: 'nav-item-interviews',
     },
     {
         name: 'Analytics',
@@ -49,6 +49,28 @@ const navItems = [
     },
 ];
 
+const interviewTypes = [
+    {
+        name: 'Job Interview',
+        href: '/interviews/job',
+        icon: Briefcase,
+        testId: 'interview-type-job',
+    },
+    {
+        name: 'Resume Interview',
+        href: '/interviews/resume',
+        icon: BookText,
+        testId: 'interview-type-resume',
+    },
+    {
+        name: 'Custom Interview',
+        href: '#',
+        icon: ListChecks,
+        testId: 'interview-type-custom',
+        comingSoon: true,
+    },
+];
+
 interface AuthenticatedNavigationProps {
     username?: string;
     isMobile?: boolean;
@@ -59,12 +81,16 @@ export function AuthenticatedNavigation({ username, isMobile = false }: Authenti
 
     const displayName = username || 'Account';
 
+    // Check if any interview path is active
+    const isInterviewActive = pathname?.startsWith('/interviews');
+
     return (
         <div className="flex items-center gap-4" data-testid="auth-navigation">
             {!isMobile ? (
                 <>
                     {/* Desktop navigation links */}
                     <nav className="flex items-center gap-4" aria-label="Main navigation">
+                        {/* Regular nav items */}
                         {navItems.map((item) => {
                             const isActive = pathname === item.href || pathname?.startsWith(`${item.href}/`);
 
@@ -86,6 +112,55 @@ export function AuthenticatedNavigation({ username, isMobile = false }: Authenti
                                 </Link>
                             );
                         })}
+
+                        {/* Interview dropdown */}
+                        <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                                <Button
+                                    variant={isInterviewActive ? "default" : "ghost"}
+                                    size="sm"
+                                    className={cn(
+                                        "flex items-center gap-1.5 text-sm font-medium",
+                                        isInterviewActive && "bg-primary/10 text-primary hover:bg-primary/20"
+                                    )}
+                                    data-testid="nav-item-interviews"
+                                >
+                                    <FileText className="h-4 w-4" />
+                                    <span>Practice Interviews</span>
+                                    <ChevronDown className="h-3 w-3 opacity-70" />
+                                </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="center" className="w-56">
+                                <DropdownMenuLabel>Interview Types</DropdownMenuLabel>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuGroup>
+                                    {interviewTypes.map((type) => (
+                                        <DropdownMenuItem
+                                            key={type.testId}
+                                            disabled={type.comingSoon}
+                                            asChild={!type.comingSoon}
+                                            data-testid={type.testId}
+                                            className={type.comingSoon ? "cursor-not-allowed opacity-60" : ""}
+                                        >
+                                            {!type.comingSoon ? (
+                                                <Link href={type.href} className="w-full flex items-center">
+                                                    <type.icon className="mr-2 h-4 w-4" />
+                                                    <span>{type.name}</span>
+                                                </Link>
+                                            ) : (
+                                                <div className="flex items-center justify-between w-full">
+                                                    <div className="flex items-center">
+                                                        <type.icon className="mr-2 h-4 w-4" />
+                                                        <span>{type.name}</span>
+                                                    </div>
+                                                    <Badge variant="outline" className="ml-2 text-xs">Coming Soon</Badge>
+                                                </div>
+                                            )}
+                                        </DropdownMenuItem>
+                                    ))}
+                                </DropdownMenuGroup>
+                            </DropdownMenuContent>
+                        </DropdownMenu>
                     </nav>
 
                     {/* User profile dropdown */}
@@ -141,10 +216,11 @@ export function AuthenticatedNavigation({ username, isMobile = false }: Authenti
                             <span>{displayName}</span>
                         </Button>
                     </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="w-56">
+                    <DropdownMenuContent align="end" className="w-64">
                         <DropdownMenuLabel>Navigation</DropdownMenuLabel>
                         <DropdownMenuSeparator />
 
+                        {/* Dashboard, Analytics, Profile links */}
                         {navItems.map((item) => (
                             <DropdownMenuItem
                                 key={item.href}
@@ -158,6 +234,37 @@ export function AuthenticatedNavigation({ username, isMobile = false }: Authenti
                             </DropdownMenuItem>
                         ))}
 
+                        <DropdownMenuSeparator />
+                        <DropdownMenuLabel>Interview Types</DropdownMenuLabel>
+                        <DropdownMenuSeparator />
+
+                        {/* Interview type links */}
+                        {interviewTypes.map((type) => (
+                            <DropdownMenuItem
+                                key={type.testId}
+                                disabled={type.comingSoon}
+                                asChild={!type.comingSoon}
+                                data-testid={`mobile-${type.testId}`}
+                                className={type.comingSoon ? "cursor-not-allowed opacity-60" : ""}
+                            >
+                                {!type.comingSoon ? (
+                                    <Link href={type.href} className="w-full flex items-center">
+                                        <type.icon className="mr-2 h-4 w-4" />
+                                        <span>{type.name}</span>
+                                    </Link>
+                                ) : (
+                                    <div className="flex items-center justify-between w-full">
+                                        <div className="flex items-center">
+                                            <type.icon className="mr-2 h-4 w-4" />
+                                            <span>{type.name}</span>
+                                        </div>
+                                        <Badge variant="outline" className="ml-2 text-xs">Coming Soon</Badge>
+                                    </div>
+                                )}
+                            </DropdownMenuItem>
+                        ))}
+
+                        <DropdownMenuSeparator />
                         <DropdownMenuItem asChild>
                             <Link href="/settings" data-testid="mobile-dropdown-settings-link">
                                 <Settings className="mr-2 h-4 w-4" />
