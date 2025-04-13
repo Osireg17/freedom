@@ -10,13 +10,15 @@ interface AuthContextType {
     user: User | null;
     session: Session | null;
     isLoading: boolean;
+    isAuthenticated: boolean;
 }
 
-// Create the authentication context
+// Create the authentication context with default values
 const AuthContext = createContext<AuthContextType>({
     user: null,
     session: null,
     isLoading: true,
+    isAuthenticated: false,
 });
 
 /**
@@ -44,6 +46,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     const [user, setUser] = useState<User | null>(null);
     const [session, setSession] = useState<Session | null>(null);
     const [isLoading, setIsLoading] = useState(true);
+    const [isAuthenticated, setIsAuthenticated] = useState(false);
     const router = useRouter();
     const { logError } = useErrorLogging();
     const supabase = createClient();
@@ -61,9 +64,16 @@ export function AuthProvider({ children }: AuthProviderProps) {
                 if (session) {
                     setSession(session);
                     setUser(session.user);
+                    setIsAuthenticated(true);
+                } else {
+                    // Make sure to set authenticated status to false if no session
+                    setIsAuthenticated(false);
+                    setUser(null);
+                    setSession(null);
                 }
             } catch (error) {
                 logError(error, { action: 'initializeAuth' });
+                setIsAuthenticated(false);
             } finally {
                 setIsLoading(false);
             }
@@ -77,16 +87,21 @@ export function AuthProvider({ children }: AuthProviderProps) {
                 try {
                     setSession(session);
                     setUser(session?.user || null);
+                    setIsAuthenticated(!!session);
 
                     if (event === 'SIGNED_IN') {
                         // Force a router refresh to update server components
                         router.refresh();
                     } else if (event === 'SIGNED_OUT') {
-                        // Force a router refresh to update server components
+                        // Clear auth state and refresh
+                        setIsAuthenticated(false);
+                        setUser(null);
+                        setSession(null);
                         router.refresh();
                     }
                 } catch (error) {
                     logError(error, { action: 'authStateChange', event });
+                    setIsAuthenticated(false);
                 } finally {
                     setIsLoading(false);
                 }
@@ -100,7 +115,12 @@ export function AuthProvider({ children }: AuthProviderProps) {
     }, [supabase.auth, router, logError]);
 
     return (
-        <AuthContext.Provider value={{ user, session, isLoading }}>
+        <AuthContext.Provider value={{
+            user,
+            session,
+            isLoading,
+            isAuthenticated
+        }}>
             {children}
         </AuthContext.Provider>
     );
