@@ -1,290 +1,265 @@
-'use client';
+"use client"
 
-import Link from 'next/link';
-import { usePathname } from 'next/navigation';
-import { Home, Settings, UserCircle, FileText, BarChart, Menu, X } from 'lucide-react';
-import { useState, useEffect, useRef } from 'react';
-import { SignOutButton } from '@/components/auth/signout-button';
-import { motion, AnimatePresence } from 'framer-motion';
+import type React from "react"
+
+import Link from "next/link"
+import { usePathname } from "next/navigation"
 import {
-    Tooltip,
-    TooltipContent,
-    TooltipProvider,
-    TooltipTrigger,
-} from "@/components/ui/tooltip";
+    Home,
+    Settings,
+    UserCircle,
+    FileText,
+    BarChart,
+    ChevronLeft,
+    ChevronRight,
+    HelpCircle,
+    MessageCircle,
+} from "lucide-react"
+import { cn } from "@/lib/utils"
+import { Button } from "@/components/ui/button"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
+import { useState, useEffect } from "react"
+import { SignOutButton } from "../auth/signout-button"
 
 const sidebarItems = [
     {
-        name: 'Overview',
-        href: '/dashboard',
+        name: "Dashboard",
+        href: "/dashboard",
         icon: Home,
+        testId: "sidebar-item-overview",
     },
     {
-        name: 'Practice Interviews',
-        href: '/dashboard/interviews',
+        name: "Practice Interviews",
+        href: "/dashboard/interviews",
         icon: FileText,
+        testId: "sidebar-item-practice-interviews",
     },
     {
-        name: 'Analytics',
-        href: '/dashboard/analytics',
+        name: "Analytics",
+        href: "/dashboard/analytics",
         icon: BarChart,
+        testId: "sidebar-item-analytics",
     },
     {
-        name: 'Profile',
-        href: '/dashboard/profile',
+        name: "Profile",
+        href: "/dashboard/profile",
         icon: UserCircle,
+        testId: "sidebar-item-profile",
     },
     {
-        name: 'Settings',
-        href: '/dashboard/settings',
+        name: "Settings",
+        href: "/dashboard/settings",
         icon: Settings,
+        testId: "sidebar-item-settings",
     },
-];
+]
 
-export default function DashboardSidebar() {
-    const pathname = usePathname();
-    const [isCollapsed, setIsCollapsed] = useState(false);
-    const sidebarRef = useRef<HTMLDivElement>(null);
+interface SidebarItemProps {
+    href: string
+    icon: React.ComponentType<{ className?: string }>
+    name: string
+    isActive: boolean
+    isCollapsed: boolean
+    testId: string
+}
 
-    // Toggle the sidebar collapse state
-    const toggleSidebar = () => {
-        setIsCollapsed(!isCollapsed);
-    };
+function SidebarItem({ href, icon: Icon, name, isActive, isCollapsed, testId }: SidebarItemProps) {
+    return (
+        <li>
+            <TooltipProvider delayDuration={300}>
+                <Tooltip>
+                    <TooltipTrigger asChild>
+                        <Link
+                            href={href}
+                            className={cn(
+                                "flex items-center gap-x-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200",
+                                isActive
+                                    ? "bg-primary/10 text-primary shadow-sm"
+                                    : "text-muted-foreground hover:bg-accent hover:text-foreground",
+                            )}
+                            data-testid={testId}
+                            aria-label={name}
+                        >
+                            <Icon
+                                className={cn(
+                                    "h-5 w-5 flex-shrink-0 transition-all duration-200",
+                                    isActive ? "text-primary" : "text-muted-foreground group-hover:text-foreground",
+                                )}
+                            />
+                            {!isCollapsed && <span className="truncate transition-all duration-200">{name}</span>}
+                        </Link>
+                    </TooltipTrigger>
+                    {isCollapsed && (
+                        <TooltipContent side="right" sideOffset={18} className="font-medium">
+                            {name}
+                        </TooltipContent>
+                    )}
+                </Tooltip>
+            </TooltipProvider>
+        </li>
+    )
+}
 
-    // Handle click outside to collapse sidebar on mobile
+interface DashboardSidebarProps {
+    isMobile?: boolean
+    isCollapsed?: boolean
+    onToggle?: () => void
+}
+
+export default function DashboardSidebar({
+    isCollapsed: propIsCollapsed,
+    onToggle,
+}: DashboardSidebarProps) {
+    const pathname = usePathname()
+    const [isCollapsed, setIsCollapsed] = useState(propIsCollapsed)
+
+    // Sync with props when they change
     useEffect(() => {
-        const handleClickOutside = (event: MouseEvent) => {
-            if (
-                window.innerWidth < 768 &&
-                sidebarRef.current &&
-                !sidebarRef.current.contains(event.target as Node)
-            ) {
-                setIsCollapsed(true);
-            }
-        };
+        setIsCollapsed(propIsCollapsed)
+    }, [propIsCollapsed])
 
-        document.addEventListener('mousedown', handleClickOutside);
-        return () => {
-            document.removeEventListener('mousedown', handleClickOutside);
-        };
-    }, []);
-
-    // Set CSS variable for main content margin
-    useEffect(() => {
-        document.documentElement.style.setProperty(
-            '--sidebar-width',
-            isCollapsed ? '64px' : '256px'
-        );
-
-        // Add or remove a class to the document for responsive styling
-        if (isCollapsed) {
-            document.documentElement.classList.add('sidebar-collapsed');
-            document.documentElement.classList.remove('sidebar-expanded');
+    const handleToggle = () => {
+        if (onToggle) {
+            onToggle()
         } else {
-            document.documentElement.classList.add('sidebar-expanded');
-            document.documentElement.classList.remove('sidebar-collapsed');
+            setIsCollapsed(!isCollapsed)
         }
-
-        return () => {
-            // Cleanup
-            document.documentElement.classList.remove('sidebar-collapsed', 'sidebar-expanded');
-        };
-    }, [isCollapsed]);
-
-    // Animation variants
-    const sidebarVariants = {
-        expanded: { width: 256 },
-        collapsed: { width: 64 }
-    };
-
-    const itemTextVariants = {
-        expanded: { opacity: 1, x: 0, display: "block" },
-        collapsed: { opacity: 0, x: -10, display: "none" }
-    };
-
-    const iconVariants = {
-        expanded: { marginRight: 12 },
-        collapsed: { marginRight: 0 }
-    };
+    }
 
     return (
-        <TooltipProvider>
-            <motion.div
-                ref={sidebarRef}
-                initial={false}
-                animate={isCollapsed ? "collapsed" : "expanded"}
-                variants={sidebarVariants}
-                transition={{ type: "spring", stiffness: 300, damping: 30 }}
-                className="fixed left-0 top-0 z-40 h-full bg-black text-white border-r border-gray-800 flex flex-col"
-                data-testid="dashboard-sidebar"
-            >
-                {/* Sidebar Header */}
-                <div className="border-b border-gray-800 p-4">
-                    <div className="flex items-center justify-between">
-                        {isCollapsed ? (
-                            <Tooltip>
-                                <TooltipTrigger asChild>
-                                    <motion.button
-                                        whileHover={{ scale: 1.05 }}
-                                        whileTap={{ scale: 0.95 }}
-                                        onClick={toggleSidebar}
-                                        className="flex aspect-square w-8 h-8 items-center justify-center rounded-lg bg-white text-black"
-                                        aria-label="Expand sidebar"
-                                        data-testid="expand-sidebar-button"
-                                    >
-                                        <Menu className="h-4 w-4" />
-                                    </motion.button>
-                                </TooltipTrigger>
-                                <TooltipContent side="right">
-                                    <p>Expand Sidebar</p>
-                                </TooltipContent>
-                            </Tooltip>
-                        ) : (
-                            <>
-                                <Link href="/" className="flex items-center">
-                                    <motion.div
-                                        className="flex aspect-square w-8 h-8 items-center justify-center rounded-lg bg-white text-black"
-                                        whileHover={{ scale: 1.05 }}
-                                    >
-                                        <span className="font-bold">A</span>
-                                    </motion.div>
-                                    <motion.div
-                                        className="ml-2 flex flex-col gap-0.5 leading-none"
-                                        variants={itemTextVariants}
-                                        transition={{ duration: 0.2 }}
-                                    >
-                                        <span className="font-bold text-xl">AceYourHireVue</span>
-                                    </motion.div>
-                                </Link>
-                                <Tooltip>
-                                    <TooltipTrigger asChild>
-                                        <motion.button
-                                            whileHover={{ scale: 1.05 }}
-                                            whileTap={{ scale: 0.95 }}
-                                            onClick={toggleSidebar}
-                                            className="text-gray-400 hover:text-white"
-                                            aria-label="Collapse sidebar"
-                                            data-testid="collapse-sidebar-button"
-                                        >
-                                            <X className="h-4 w-4" />
-                                        </motion.button>
-                                    </TooltipTrigger>
-                                    <TooltipContent>
-                                        <p>Collapse Sidebar</p>
-                                    </TooltipContent>
-                                </Tooltip>
-                            </>
-                        )}
-                    </div>
+        <div
+            className={cn(
+                "h-full flex flex-col bg-background border-r transition-all duration-300 ease-in-out",
+                isCollapsed ? "w-[70px]" : "w-[260px]",
+            )}
+            data-testid="dashboard-sidebar"
+        >
+            {/* Logo Section */}
+            <div className="flex h-16 items-center border-b px-4">
+                <div className="flex w-full items-center">
+                    {!isCollapsed ? (
+                        <>
+                            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-primary to-primary/80 text-primary-foreground shadow-sm">
+                                <span className="font-bold text-lg">A</span>
+                            </div>
+                            <span className="ml-3 font-bold text-lg tracking-tight transition-opacity duration-200">
+                                AceYourHireVue
+                            </span>
+                        </>
+                    ) : null}
+
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        className={cn("h-8 w-8 rounded-full hover:bg-accent", isCollapsed ? "mx-auto" : "ml-auto")}
+                        onClick={handleToggle}
+                        data-testid={isCollapsed ? "expand-sidebar-button" : "collapse-sidebar-button"}
+                        aria-label={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+                    >
+                        {isCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
+                    </Button>
                 </div>
+            </div>
 
-                {/* Sidebar Content */}
-                <div className="flex-1 overflow-y-auto py-4">
-                    <ul className="space-y-2 px-2">
+            {/* Navigation */}
+            <div className="flex-1 overflow-auto py-6 px-3">
+                <nav aria-label="Main Navigation">
+                    <ul className="space-y-1.5">
                         {sidebarItems.map((item) => {
-                            const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
+                            const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`)
                             return (
-                                <motion.li
+                                <SidebarItem
                                     key={item.href}
-                                    whileHover={{ x: 4 }}
-                                    transition={{ type: "spring", stiffness: 400, damping: 20 }}
-                                >
-                                    {isCollapsed ? (
-                                        <Tooltip>
-                                            <TooltipTrigger asChild>
-                                                <Link
-                                                    href={item.href}
-                                                    className={`flex items-center rounded-lg p-2 transition-all ${isActive
-                                                        ? 'bg-gray-800 text-white'
-                                                        : 'text-gray-400 hover:text-white hover:bg-gray-800'
-                                                        }`}
-                                                    data-testid={`sidebar-item-${item.name.toLowerCase().replace(/\s+/g, '-')}`}
-                                                    aria-label={item.name}
-                                                >
-                                                    <motion.div
-                                                        variants={iconVariants}
-                                                        transition={{ duration: 0.2 }}
-                                                    >
-                                                        <item.icon className="h-5 w-5" />
-                                                    </motion.div>
-                                                    <span className="sr-only">{item.name}</span>
-                                                </Link>
-                                            </TooltipTrigger>
-                                            <TooltipContent side="right">
-                                                <p>{item.name}</p>
-                                            </TooltipContent>
-                                        </Tooltip>
-                                    ) : (
-                                        <Link
-                                            href={item.href}
-                                            className={`flex items-center rounded-lg p-2 transition-all ${isActive
-                                                ? 'bg-gray-800 text-white'
-                                                : 'text-gray-400 hover:text-white hover:bg-gray-800'
-                                                }`}
-                                            data-testid={`sidebar-item-${item.name.toLowerCase().replace(/\s+/g, '-')}`}
-                                            aria-label={item.name}
-                                        >
-                                            <motion.div
-                                                variants={iconVariants}
-                                                transition={{ duration: 0.2 }}
-                                            >
-                                                <item.icon className="h-5 w-5" />
-                                            </motion.div>
-
-                                            <AnimatePresence>
-                                                <motion.span
-                                                    variants={itemTextVariants}
-                                                    transition={{ duration: 0.2 }}
-                                                    className="text-base font-medium"
-                                                >
-                                                    {item.name}
-                                                </motion.span>
-                                            </AnimatePresence>
-                                        </Link>
-                                    )}
-                                </motion.li>
-                            );
+                                    href={item.href}
+                                    icon={item.icon}
+                                    name={item.name}
+                                    isActive={isActive}
+                                    isCollapsed={!!isCollapsed}
+                                    testId={item.testId}
+                                />
+                            )
                         })}
                     </ul>
-                </div>
+                </nav>
+            </div>
 
-                {/* Sidebar Footer with SignOutButton */}
-                <div className="border-t border-gray-800 p-4">
-                    <motion.div
-                        whileHover={{ x: 4 }}
-                        transition={{ type: "spring", stiffness: 400, damping: 20 }}
-                    >
-                        {isCollapsed ? (
-                            <Tooltip>
-                                <TooltipTrigger asChild>
-                                    <div>
-                                        <SignOutButton
-                                            variant="ghost"
-                                            size="icon"
-                                            showIcon={true}
-                                            hideText={true}
-                                            className="w-full justify-center text-gray-400 hover:text-white hover:bg-gray-800"
-                                            data-testid="signout-button"
-                                        />
-                                    </div>
-                                </TooltipTrigger>
-                                <TooltipContent side="right">
-                                    <p>Sign Out</p>
-                                </TooltipContent>
-                            </Tooltip>
-                        ) : (
-                            <SignOutButton
-                                variant="ghost"
+            {/* Help & Support Section */}
+            {!isCollapsed ? (
+                <div className="mt-auto px-3 mb-4">
+                    <div className="bg-muted/40 rounded-lg p-3 shadow-sm border border-border/50">
+                        <h4 className="font-medium text-sm mb-2 text-center">Need help?</h4>
+                        <div className="flex gap-2">
+                            <Button
                                 size="sm"
-                                showIcon={true}
-                                hideText={false}
-                                className="w-full justify-start text-gray-400 hover:text-white hover:bg-gray-800"
-                                data-testid="signout-button"
-                            />
-                        )}
-                    </motion.div>
+                                variant="outline"
+                                className="w-1/2 h-9 text-xs gap-1.5 font-medium"
+                                data-testid="help-button"
+                            >
+                                <HelpCircle className="h-3.5 w-3.5" />
+                                Help
+                            </Button>
+                            <Button
+                                size="sm"
+                                variant="outline"
+                                className="w-1/2 h-9 text-xs gap-1.5 font-medium"
+                                data-testid="support-button"
+                            >
+                                <MessageCircle className="h-3.5 w-3.5" />
+                                Support
+                            </Button>
+                        </div>
+                    </div>
                 </div>
-            </motion.div>
-        </TooltipProvider>
-    );
+            ) : (
+                <div className="mt-auto px-3 mb-4">
+                    <TooltipProvider>
+                        <Tooltip>
+                            <TooltipTrigger asChild>
+                                <Button variant="outline" size="icon" className="w-full h-9" data-testid="help-button">
+                                    <HelpCircle className="h-4 w-4" />
+                                </Button>
+                            </TooltipTrigger>
+                            <TooltipContent side="right">
+                                <p>Help & Support</p>
+                            </TooltipContent>
+                        </Tooltip>
+                    </TooltipProvider>
+                </div>
+            )}
+
+            {/* Footer with signout */}
+            <div className="border-t p-3">
+                {isCollapsed ? (
+                    <TooltipProvider>
+                        <Tooltip>
+                            <TooltipTrigger asChild>
+                                <div>
+                                    <SignOutButton
+                                        variant="ghost"
+                                        size="icon"
+                                        showIcon={true}
+                                        hideText={true}
+                                        className="w-full justify-center text-muted-foreground hover:text-primary h-9"
+                                        data-testid="signout-button"
+                                    />
+                                </div>
+                            </TooltipTrigger>
+                            <TooltipContent side="right">
+                                <p>Sign Out</p>
+                            </TooltipContent>
+                        </Tooltip>
+                    </TooltipProvider>
+                ) : (
+                    <SignOutButton
+                        variant="ghost"
+                        size="sm"
+                        showIcon={true}
+                        hideText={false}
+                        className="w-full justify-start text-muted-foreground hover:text-primary hover:bg-accent h-9 px-3"
+                        data-testid="signout-button"
+                    />
+                )}
+            </div>
+        </div>
+    )
 }

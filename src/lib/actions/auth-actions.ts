@@ -47,6 +47,8 @@ export async function signOut() {
   }
 }
 
+// Update in src/lib/actions/auth-actions.ts
+
 /**
  * Creates a new user record in our database after Supabase authentication
  * This is used to store additional user information
@@ -64,7 +66,7 @@ export async function createUserRecord(
     });
 
     if (existingUser) {
-      // User already exists, update their info
+      // User already exists, update their info if needed
       await db.update(users)
         .set({
           firstName,
@@ -93,14 +95,6 @@ export async function createUserRecord(
       createdAt: new Date(),
       updatedAt: new Date(),
     });
-    
-    // Verify the Supabase auth user exists
-    const supabaseClient = await createClient();
-    const { data: { user }, error } = await supabaseClient.auth.getUser();
-    
-    if (error || !user) {
-      throw new Error('Authentication error: User not found in Supabase Auth');
-    }
     
     return { success: true };
   } catch (error) {

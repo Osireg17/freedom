@@ -14,12 +14,24 @@ interface ErrorContext {
 /**
  * Log an error to the appropriate service based on environment
  */
-export function logErrorToService(error: Error, context: ErrorContext = {}): void {
+export function logErrorToService(error: Error | unknown, context: ErrorContext = {}): void {
+  // Handle non-Error objects and convert them
+  const normalizedError = error instanceof Error ? error : new Error(
+    typeof error === 'string' ? error : 'Unknown error'
+  );
+  
+  // Capture additional properties for TypeError specifically
+  const typeErrorInfo = error instanceof TypeError ? {
+    targetObject: error.name === 'TypeError' && error.message.includes('null') ? 'null' : 'undefined',
+    operation: error.message.includes('setting') ? 'property write' : 'unknown operation'
+  } : {};
+  
   // Create a structured error object
   const errorData = {
-    name: error.name,
-    message: error.message,
-    stack: error.stack,
+    name: normalizedError.name,
+    message: normalizedError.message,
+    stack: normalizedError.stack,
+    ...typeErrorInfo,
     ...context,
     timestamp: new Date().toISOString(),
     environment: process.env.NODE_ENV,
@@ -27,12 +39,12 @@ export function logErrorToService(error: Error, context: ErrorContext = {}): voi
 
   // In development, output to console for immediate feedback
   if (!isProduction) {
-    console.error('Error:', error.message, errorData);
+    console.error('Error:', normalizedError.message, errorData);
     return;
   }
 
   // In production, send to Axiom
-  axiomLogger.error(error.message, errorData);
+  axiomLogger.error(normalizedError.message, errorData);
 }
 
 /**

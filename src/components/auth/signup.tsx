@@ -1,5 +1,5 @@
-"use client"
-
+// src/components/auth/signup.tsx
+'use client'
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
@@ -8,7 +8,7 @@ import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { toast } from "sonner"
 import Link from "next/link"
-import { CheckCircle2, XCircle, Mail, Lock, Eye, EyeOff } from "lucide-react"
+import { CheckCircle2, XCircle, Mail, Lock, Eye, EyeOff, User } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -16,9 +16,17 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { Card, CardContent, CardFooter } from "@/components/ui/card"
 import { useErrorLogging } from "@/hooks/use-error-logging"
 
-// Define the sign-up form schema using zod
+// Updated sign-up form schema with firstName and lastName
 const signUpSchema = z
     .object({
+        firstName: z
+            .string()
+            .min(2, { message: "First name must be at least 2 characters" })
+            .max(50, { message: "First name must be less than 50 characters" }),
+        lastName: z
+            .string()
+            .min(2, { message: "Last name must be at least 2 characters" })
+            .max(50, { message: "Last name must be less than 50 characters" }),
         email: z.string().email({ message: "Please enter a valid email address" }),
         password: z
             .string()
@@ -40,13 +48,14 @@ export default function SignUp() {
     const [isLoading, setIsLoading] = useState(false)
     const [showPassword, setShowPassword] = useState(false)
     const [showConfirmPassword, setShowConfirmPassword] = useState(false)
-    // State variable to track if the toast has already been shown
     const { logError } = useErrorLogging()
     const supabase = createClient()
 
     const form = useForm<SignUpFormValues>({
         resolver: zodResolver(signUpSchema),
         defaultValues: {
+            firstName: "",
+            lastName: "",
             email: "",
             password: "",
             confirmPassword: "",
@@ -67,13 +76,15 @@ export default function SignUp() {
         try {
             setIsLoading(true);
 
-            // Sign up with Supabase
+            // Sign up with Supabase - now including firstName and lastName in metadata
             const { data, error } = await supabase.auth.signUp({
                 email: values.email,
                 password: values.password,
                 options: {
                     emailRedirectTo: `${window.location.origin}/auth/callback`,
                     data: {
+                        first_name: values.firstName,
+                        last_name: values.lastName,
                         email_confirmed: false,
                     },
                 },
@@ -102,6 +113,52 @@ export default function SignUp() {
                 <CardContent className="p-0 sm:p-6">
                     <Form {...form}>
                         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4" data-testid="signup-form">
+                            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                                <FormField
+                                    control={form.control}
+                                    name="firstName"
+                                    render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel>First Name</FormLabel>
+                                            <FormControl>
+                                                <div className="relative">
+                                                    <User className="absolute left-3 top-2.5 h-5 w-5 text-muted-foreground" />
+                                                    <Input
+                                                        placeholder="John"
+                                                        className="pl-10"
+                                                        {...field}
+                                                        data-testid="signup-firstname-input"
+                                                        aria-label="First name"
+                                                    />
+                                                </div>
+                                            </FormControl>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )}
+                                />
+                                <FormField
+                                    control={form.control}
+                                    name="lastName"
+                                    render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel>Last Name</FormLabel>
+                                            <FormControl>
+                                                <div className="relative">
+                                                    <User className="absolute left-3 top-2.5 h-5 w-5 text-muted-foreground" />
+                                                    <Input
+                                                        placeholder="Doe"
+                                                        className="pl-10"
+                                                        {...field}
+                                                        data-testid="signup-lastname-input"
+                                                        aria-label="Last name"
+                                                    />
+                                                </div>
+                                            </FormControl>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )}
+                                />
+                            </div>
                             <FormField
                                 control={form.control}
                                 name="email"
