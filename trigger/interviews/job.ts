@@ -104,53 +104,64 @@ export const generateJobInterviewQuestionsJob = schemaTask({
 });
 
 // Helper function to generate the interview prompt
+// Helper function to generate the interview prompt - INDUSTRY AGNOSTIC
 function generateInterviewPrompt(payload: JobInterviewPayload): string {
-    return `You are an expert AI interviewer for AceYourHireVue, specializing in creating realistic one-way video interview questions that assess candidates' qualifications for specific job positions. Your task is to generate thoughtful, relevant questions based on the job description provided.
-  
-  CONTEXT:
-  - Company Name: ${payload.companyName}
-  - Position: ${payload.jobTitle}
-  - Experience Level: ${payload.yearsExperience} years
-  - Job Description: ${payload.jobDescription}
-  
-  INSTRUCTIONS:
-  Generate 5 high-quality interview questions that:
-  1. Are directly relevant to the ${payload.jobTitle} role at ${payload.companyName}
-  2. Match the complexity appropriate for someone with ${payload.yearsExperience} years of experience
-  3. Include a mix of behavioral and technical questions (3 behavioral, 2 technical)
-  4. Follow the STAR methodology (Situation, Task, Action, Result) to elicit comprehensive responses
-  5. Cover different competency areas relevant to the role
-  
-  QUESTION CATEGORIES TO INCLUDE:
-  - Technical Skills: Questions that assess specific technical knowledge mentioned in the job description
-  - Problem Solving: Scenario-based questions related to challenges in this role
-  - Leadership/Teamwork: Questions about collaboration and influence
-  - Communication: Questions about stakeholder interactions common in this role
-  - Industry Knowledge: Questions specific to ${payload.companyName}'s industry
-  
-  RESPONSE FORMAT(JSON array):
-  {
-    "questions": [
-      {
-        "question": "Detailed, open-ended question that prompts a STAR response",
-        "category": "One of the categories listed above",
-        "type": "behavioral" or "technical",
-      }
-    ]
-  }
-  
-  IMPORTANT GUIDELINES:
-  - Use industry-specific terminology relevant to ${payload.jobTitle}
-  - Scale question difficulty based on ${payload.yearsExperience} years of experience
-  - Reference technologies, methodologies, or skills mentioned in the job description
-  - Create questions that assess both past experiences and hypothetical scenarios
-  - Ensure questions are specific enough to demonstrate relevant expertise but open-ended enough to allow candidates to showcase their unique experiences
-  - Format questions to be answered within ${payload.timeToAnswer} seconds (typical one-way video interview answer time)
-  - Avoid generic questions that could apply to any job role
-  - Ensure technical questions are specific to technologies/skills mentioned in the job description
-  
-  Your goal is to create questions that would be used in a real HireVue-style one-way video interview to thoroughly evaluate a candidate's fit for this specific role.`.trim();
-  }
+  const context = `
+CONTEXT:
+- Company Name: ${payload.companyName}
+- Position Title: ${payload.jobTitle}
+- Required Experience Level: ${payload.yearsExperience} years
+- Job Description: ${payload.jobDescription}
+`;
+
+  const instructions = `
+INSTRUCTIONS:
+Based *only* on the provided CONTEXT (especially the Job Description), generate 5 high-quality interview questions suitable for a one-way video interview screen for the specific Position Title at the specified Company Name.
+
+The questions MUST:
+1. Be **directly relevant** to the responsibilities, skills, and qualifications outlined in the Job Description.
+2. Be appropriate for a candidate with the specified Required Experience Level.
+3. Assess a mix of behavioral competencies and role-specific skills/knowledge identified *from the Job Description*. Aim for a balance (e.g., 3 behavioral, 2 skill-based/situational, but adjust based on the role's nature).
+4. Elicit detailed responses, encouraging the STAR method (Situation, Task, Action, Result) for behavioral questions where applicable.
+5. Cover diverse key competency areas **derived from the Job Description** (e.g., problem-solving, communication, teamwork, leadership, analytical skills, specific domain knowledge, technical/practical abilities if mentioned).
+`;
+
+  const guidelines = `
+IMPORTANT GUIDELINES:
+- **Derive Key Competencies:** Identify the core skills, knowledge areas, and behavioral traits required for *this specific role* by analyzing the Job Description. Base your questions on these derived competencies.
+- **Skill/Knowledge Questions:** If the Job Description mentions required technical skills, practical abilities, certifications, or specific knowledge areas (e.g., financial modeling, specific regulations, laboratory techniques, software tools), formulate questions to assess proficiency or experience in those *exact areas* or related fields and tasks associated with the role.
+- **Situational Questions:** Create situational questions that assess how candidates would approach hypothetical scenarios relevant to the role, based on the Job Description. These should be realistic and aligned with the responsibilities outlined.
+- **Behavioral Questions:** Frame behavioral questions around scenarios relevant to the responsibilities and challenges likely faced in *this role*, based on the Job Description.
+- **Tool/Methodology Agnosticism:** If asking about experience with specific tools, software, or methodologies mentioned in the Job Description, phrase the question to **allow candidates to discuss analogous experience** if they haven't used the exact item (e.g., "Describe your experience with project management software like [Tool from JD], or similar tools..." or "Tell me about a time you used data analysis techniques to..."). **Avoid using company-specific jargon or internal tool names** unless clearly defined as a public requirement in the Job Description.
+- **Experience Level:** Adjust the complexity and scope of the questions to match the Required Experience Level. More senior roles might require questions about strategy, leadership, or complex problem-solving.
+- **Clarity and Focus:** Ensure questions are clear, unambiguous, and focused on assessing a specific competency or skill relevant to the Job Description.
+- **Time Constraint:** Questions should be answerable within approximately ${payload.timeToAnswer} seconds.
+`;
+
+  const responseFormat = `
+RESPONSE FORMAT (JSON array):
+{
+  "questions": [
+    {
+      "question": "Detailed, open-ended question reflecting the guidelines and derived competencies.",
+      "category": "The specific key competency area derived from the Job Description that this question assesses (e.g., 'Project Management', 'Client Communication', 'Data Analysis', 'Regulatory Compliance', 'Machine Operation', 'Software Development Skill X')",
+      "type": "behavioral" // Use 'behavioral' for questions primarily assessing past behavior or handling situations.
+           // or "skill-based" // Use 'skill-based' for questions primarily assessing specific knowledge, technical/practical ability, or application of skills.
+           // or "situational" // Use 'situational' for hypothetical scenarios assessing judgment or approach. Choose the most appropriate type.
+    }
+    // ... total of 5 questions
+  ]
+}
+`;
+
+  // Changed the AI's persona slightly
+  return `You are an expert AI assistant tasked with generating fair and relevant screening interview questions for a one-way video interview. You will receive context about a specific job role at a specific company. Your goal is to create questions based *strictly* on the provided Job Description and role requirements, suitable for candidates from any background who meet the qualifications.
+${context}
+${instructions}
+${guidelines}
+${responseFormat}
+Generate the 5 questions now based *only* on the provided context.`.trim();
+}
 
 // Helper function to generate questions with OpenAI
 async function generateQuestionsWithOpenAI(prompt: string): Promise<GeneratedQuestion[]> {
