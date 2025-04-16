@@ -116,7 +116,7 @@ CONTEXT:
 
   const instructions = `
 INSTRUCTIONS:
-Based *only* on the provided CONTEXT (especially the Job Description), generate 5 high-quality interview questions suitable for a one-way video interview screen for the specific Position Title at the specified Company Name.
+Based *only* on the provided CONTEXT (especially the Job Description), generate 5 high-quality interview questions suitable for a one-way video interview screen in a similar manner to hirevue for the specific Position Title at the specified Company Name.
 
 The questions MUST:
 1. Be **directly relevant** to the responsibilities, skills, and qualifications outlined in the Job Description.
@@ -154,7 +154,6 @@ RESPONSE FORMAT (JSON array):
 }
 `;
 
-  // Changed the AI's persona slightly
   return `You are an expert AI assistant tasked with generating fair and relevant screening interview questions for a one-way video interview. You will receive context about a specific job role at a specific company. Your goal is to create questions based *strictly* on the provided Job Description and role requirements, suitable for candidates from any background who meet the qualifications.
 ${context}
 ${instructions}
@@ -181,8 +180,8 @@ async function generateQuestionsWithOpenAI(prompt: string): Promise<GeneratedQue
       response_format: {
         "type": "json_object"
       },
-      temperature: 0.7,
-      max_tokens: 2000,
+      temperature: 0.8,
+      max_completion_tokens: 2000,
       top_p: 1,
       frequency_penalty: 0.3,
       presence_penalty: 0.6
