@@ -6,7 +6,7 @@ import OpenAI from 'openai';
 import { schemaTask, logger, configure } from '@trigger.dev/sdk/v3';
 import { v4 as uuidv4 } from 'uuid';
 import { z } from 'zod';
-const client = new OpenAI();
+
 
 
 // Configure Trigger.dev
@@ -155,9 +155,8 @@ function generateInterviewPrompt(payload: JobInterviewPayload): string {
 // Helper function to generate questions with OpenAI
 async function generateQuestionsWithOpenAI(prompt: string): Promise<GeneratedQuestion[]> {
   try {
-    const completion = await client.chat.completions.create({
-      model: "gpt-4o-mini-search-preview",
-      web_search_options: {},
+    const completion = await openai.chat.completions.create({
+      model: "gpt-4.1-mini",
       messages: [
         {
           role: "system",
@@ -189,10 +188,10 @@ async function generateQuestionsWithOpenAI(prompt: string): Promise<GeneratedQue
         throw new Error('Invalid response format: expected array of questions');
       }
 
-      return parsed.questions.map((q: { question: string; area: string; context: string }) => ({
+      return parsed.questions.map((q: { question: string; category: string; type: 'behavioral' | 'technical' }) => ({
         question: q.question,
-        area: q.area,
-        context: q.context
+        category: q.category,
+        type: q.type
       }));
     } catch (parseError) {
       logger.error('Error parsing OpenAI response', { responseText, error: parseError });
