@@ -41,7 +41,7 @@ type JobInterviewPayload = z.infer<typeof JobInterviewPayloadSchema>;
 interface GeneratedQuestion {
   question: string;
   category: string;
-  type: 'behavioral' | 'technical';
+  type: 'behavioral' | 'technical' | 'situational'| 'other';
 }
 
 interface TaskResult {
@@ -234,7 +234,9 @@ async function storeInterviewQuestions(interviewId: string, questions: Generated
       interviewId,
       questionNumber: i + 1,
       questionText: question.question,
-      questionType: question.type,
+      questionType: ['behavioral', 'technical', 'situational'].includes(question.type) 
+      ? question.type 
+      : 'other',
     });
   }
 }

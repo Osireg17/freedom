@@ -11,7 +11,7 @@ import {
 // Enums
 export const interviewTypeEnum = pgEnum('interview_type', ['ai', 'custom', 'resume']);
 export const interviewStatusEnum = pgEnum('interview_status', ['not_started', 'ongoing', 'completed']);
-export const questionTypeEnum = pgEnum('question_type', ['behavioral', 'technical', 'custom']);
+export const questionTypeEnum = pgEnum('question_type', ['behavioral', 'technical', 'situational', 'other']);
 
 // Users table - updated for Supabase Auth
 export const users = pgTable('users', {

@@ -10,7 +10,7 @@ export default defineConfig({
   out: './drizzle/migrations',
   dialect: 'postgresql',
   dbCredentials: {
-    url: process.env.LOCAL_DATABASE_URL as string,
+    url: process.env.LOCAL_DATABASE_URL || process.env.NEXT_PUBLIC_DATABASE_URL as string,
   },
   verbose: true,
   strict: true,
