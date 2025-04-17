@@ -113,20 +113,10 @@ export default function JobInterviewForm() {
             const data = await response.json();
 
             // Update progress indicators
-            setFormProgress(80);
-            await new Promise(resolve => setTimeout(resolve, 300));
             setFormProgress(100);
 
-            // Show success toast
-            toast.success(
-                "Interview created successfully! Questions are being generated. You will be notified when they are ready.",
-                {
-                    duration: 5000,
-                    description: "You can check the status of your interview in the dashboard.",
-                }
-            );
-            // Redirect to the interviews dashboard with the new interview ID
-            router.push(`/dashboard/interviews?interviewId=${data.interviewId}&status=processing`);
+            // Redirect to the processing page
+            router.push(`/interviews/job/processing?interviewId=${data.interviewId}&runId=${data.runId}`);
         } catch (error) {
             // Log error for debugging
             logError(error, {

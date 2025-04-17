@@ -1,8 +1,9 @@
 import { render, screen } from '@testing-library/react';
 import FeaturesPage from '../page';
 
+
 // Mock the components that are used in the FeaturesPage
-jest.mock('../../../components/features/features-card', () => ({
+jest.mock('../../../../components/features/features-card', () => ({
     FeatureCard: ({ testId, title, description }: { testId: string, title: string, description: string }) => (
         <div data-testid={testId}>
             <h3>{title}</h3>
@@ -11,7 +12,7 @@ jest.mock('../../../components/features/features-card', () => ({
     ),
 }));
 
-jest.mock('../../../components/features/video-demo', () => ({
+jest.mock('../../../../components/features/video-demo', () => ({
     VideoDemo: ({ testId, title }: { testId: string, title: string }) => <div data-testid={testId}>{title}</div>,
 }));
 

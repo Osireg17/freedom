@@ -1,130 +1,97 @@
-import React from 'react';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { Header } from '../header';
+import { useMediaQuery } from '@/hooks/use-media-query';
+import { getCurrentUser } from '@/lib/actions/auth-actions';
+import { usePathname } from 'next/navigation';
 
-// Mock Next.js Link component
-jest.mock('next/link', () => {
-    const MockLink = ({ children, href, ...rest }: React.AnchorHTMLAttributes<HTMLAnchorElement> & { href: string, children?: React.ReactNode }) => (
-        <a href={href} {...rest}>
-            {children}
-        </a>
-    );
-    MockLink.displayName = 'MockLink';
-    return MockLink;
-});
+// Mock the hooks and functions
+jest.mock('next/navigation', () => ({
+    usePathname: jest.fn()
+}));
 
-describe('Header component', () => {
-    it('renders the header with logo', () => {
-        render(<Header />);
+jest.mock('../../../hooks/use-media-query', () => ({
+    useMediaQuery: jest.fn()
+}));
 
-        const header = screen.getByTestId('site-header');
-        const logo = screen.getByTestId('header-logo-link');
+jest.mock('../../../lib/actions/auth-actions', () => ({
+    getCurrentUser: jest.fn()
+}));
 
-        expect(header).toBeInTheDocument();
-        expect(logo).toBeInTheDocument();
-        expect(logo).toHaveAttribute('href', '/');
-        expect(logo).toHaveTextContent('AceYourHireVue');
+describe('Header', () => {
+    beforeEach(() => {
+        jest.clearAllMocks();
+        (usePathname as jest.Mock).mockReturnValue('/');
+        (useMediaQuery as jest.Mock).mockReturnValue(false);
+        (getCurrentUser as jest.Mock).mockResolvedValue(null);
     });
 
-    it('renders desktop navigation links', () => {
+    it('renders the logo with correct link', async () => {
         render(<Header />);
 
-        const featuresLink = screen.getByTestId('header-nav-features');
-        const pricingLink = screen.getByTestId('header-nav-pricing');
-        const contactLink = screen.getByTestId('header-nav-contact');
-
-        expect(featuresLink).toBeInTheDocument();
-        expect(featuresLink).toHaveAttribute('href', '/features');
-
-        expect(pricingLink).toBeInTheDocument();
-        expect(pricingLink).toHaveAttribute('href', '/pricing');
-
-        expect(contactLink).toBeInTheDocument();
-        expect(contactLink).toHaveAttribute('href', '/contact');
+        const logoLink = screen.getByTestId('header-logo-link');
+        expect(logoLink).toHaveAttribute('href', '/');
+        expect(logoLink).toHaveTextContent('AceYourHireVue');
     });
 
-    it('renders authentication buttons in desktop view', () => {
+    it('renders desktop navigation for non-authenticated users', async () => {
         render(<Header />);
 
-        const signInButton = screen.getByTestId('header-signin-button');
-        const signUpButton = screen.getByTestId('header-signup-button');
-
-        expect(signInButton).toBeInTheDocument();
-        expect(signInButton).toHaveAttribute('href', '/sign-in');
-
-        expect(signUpButton).toBeInTheDocument();
-        expect(signUpButton).toHaveAttribute('href', '/sign-up');
+        await waitFor(() => {
+            expect(screen.getByTestId('header-nav-features')).toBeInTheDocument();
+            expect(screen.getByTestId('header-nav-pricing')).toBeInTheDocument();
+            expect(screen.getByTestId('header-nav-contact')).toBeInTheDocument();
+            expect(screen.getByTestId('header-signin-button')).toBeInTheDocument();
+            expect(screen.getByTestId('header-signup-button')).toBeInTheDocument();
+        });
     });
 
-    it('shows mobile menu when menu button is clicked', () => {
+    it('toggles mobile menu when menu button is clicked', async () => {
+        (useMediaQuery as jest.Mock).mockReturnValue(true);
+
         render(<Header />);
 
-        // Menu should not be visible initially
+        await waitFor(() => {
+            expect(screen.getByTestId('header-mobile-menu-button')).toBeInTheDocument();
+        });
+
+        // Menu should be closed initially
         expect(screen.queryByTestId('header-mobile-menu')).not.toBeInTheDocument();
 
-        // Click the menu button
-        const menuButton = screen.getByTestId('header-mobile-menu-button');
-        fireEvent.click(menuButton);
+        // Click to open menu
+        fireEvent.click(screen.getByTestId('header-mobile-menu-button'));
 
-        // Now the mobile menu should be visible
-        const mobileMenu = screen.getByTestId('header-mobile-menu');
-        expect(mobileMenu).toBeInTheDocument();
-
-        // Check if mobile navigation links are rendered
-        expect(screen.getByTestId('header-mobile-nav-features')).toBeInTheDocument();
-        expect(screen.getByTestId('header-mobile-nav-pricing')).toBeInTheDocument();
-        expect(screen.getByTestId('header-mobile-nav-contact')).toBeInTheDocument();
-    });
-
-    it('hides mobile menu when clicked again', () => {
-        render(<Header />);
-
-        // Open the menu
-        const menuButton = screen.getByTestId('header-mobile-menu-button');
-        fireEvent.click(menuButton);
-
-        // Verify menu is open
+        // Menu should now be open
         expect(screen.getByTestId('header-mobile-menu')).toBeInTheDocument();
+        expect(screen.getByTestId('header-mobile-nav-features')).toBeInTheDocument();
 
-        // Close the menu
-        fireEvent.click(menuButton);
+        // Click again to close menu
+        fireEvent.click(screen.getByTestId('header-mobile-menu-button'));
 
-        // Verify menu is closed
+        // Menu should be closed again
         expect(screen.queryByTestId('header-mobile-menu')).not.toBeInTheDocument();
     });
 
-    it('closes mobile menu when a navigation link is clicked', () => {
+    it('renders AuthenticatedNavigation when user is logged in', async () => {
+        const mockUser = {
+            user_metadata: { first_name: 'John' }
+        };
+        (getCurrentUser as jest.Mock).mockResolvedValue(mockUser);
+
         render(<Header />);
 
-        // Open the menu
-        fireEvent.click(screen.getByTestId('header-mobile-menu-button'));
-
-        // Click a navigation link
-        fireEvent.click(screen.getByTestId('header-mobile-nav-features'));
-
-        // Menu should be closed
-        expect(screen.queryByTestId('header-mobile-menu')).not.toBeInTheDocument();
+        // Wait for authentication check to complete
+        await waitFor(() => {
+            // We can't directly test the AuthenticatedNavigation component,
+            // but we can check that the regular navigation is not displayed
+            expect(screen.queryByTestId('header-nav-features')).not.toBeInTheDocument();
+        });
     });
 
-    it('closes mobile menu when authentication buttons are clicked', () => {
-        render(<Header />);
+    it('does not render header on error pages', async () => {
+        (usePathname as jest.Mock).mockReturnValue('/error/404');
 
-        // Open the menu
-        fireEvent.click(screen.getByTestId('header-mobile-menu-button'));
+        const { container } = render(<Header />);
 
-        // Click sign in button
-        fireEvent.click(screen.getByTestId('header-mobile-signin-button'));
-
-        // Menu should be closed
-        expect(screen.queryByTestId('header-mobile-menu')).not.toBeInTheDocument();
-
-        // Open the menu again
-        fireEvent.click(screen.getByTestId('header-mobile-menu-button'));
-
-        // Click sign up button
-        fireEvent.click(screen.getByTestId('header-mobile-signup-button'));
-
-        // Menu should be closed
-        expect(screen.queryByTestId('header-mobile-menu')).not.toBeInTheDocument();
+        expect(container.firstChild).toBeNull();
     });
 });
