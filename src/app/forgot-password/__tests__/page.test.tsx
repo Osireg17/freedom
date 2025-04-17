@@ -1,94 +1,37 @@
 import { render, screen } from '@testing-library/react';
-import '@testing-library/jest-dom';
-import CompleteProfilePage from '../../complete-profile/page';
-import { createClient } from '@/lib/supabase/server';
+import ForgotPasswordPage from '../page';
 
-// Mock the dependencies
-jest.mock('@/lib/supabase/server', () => ({
-    createClient: jest.fn(),
-}));
+// Mock the ForgotPasswordForm component
+jest.mock('@/components/auth/forgot-password-form', () => {
+    return function MockForgotPasswordForm() {
+        return <div data-testid="forgot-password-form">Mocked Forgot Password Form</div>;
+    };
+});
 
-jest.mock('next/navigation', () => ({
-    redirect: jest.fn(),
-}));
+describe('ForgotPasswordPage', () => {
+    it('renders the page with correct title and description', () => {
+        render(<ForgotPasswordPage />);
 
-jest.mock('@/components/auth/profile-form', () => ({
-    __esModule: true,
-    default: () => <div data-testid="profile-form">ProfileForm</div>,
-}));
-
-describe('CompleteProfilePage', () => {
-    beforeEach(() => {
-        jest.clearAllMocks();
+        expect(screen.getByTestId('forgot-password-page')).toBeInTheDocument();
+        expect(screen.getByText('Forgot Password')).toBeInTheDocument();
+        expect(
+            screen.getByText('Enter your email address and we\'ll send you a link to reset your password')
+        ).toBeInTheDocument();
     });
 
-    it('renders profile form when user is authenticated', async () => {
-        const mockUser = {
-            id: 'user123',
-            email: 'test@example.com',
-            email_confirmed_at: null,
-            user_metadata: {}
-        };
+    it('renders the ForgotPasswordForm component', () => {
+        render(<ForgotPasswordPage />);
 
-        (createClient as jest.Mock).mockResolvedValue({
-            auth: {
-                getUser: jest.fn().mockResolvedValue({
-                    data: { user: mockUser },
-                    error: null,
-                }),
-            },
-        });
-
-        const Component = await CompleteProfilePage();
-        render(Component);
-
-        expect(screen.getByText('Complete Your Profile')).toBeInTheDocument();
-        expect(screen.getByTestId('profile-form')).toBeInTheDocument();
+        expect(screen.getByTestId('forgot-password-form')).toBeInTheDocument();
     });
 
-    it('shows an email verification notice when email is not verified', async () => {
-        const mockUser = {
-            id: 'user123',
-            email: 'test@example.com',
-            email_confirmed_at: null,
-            user_metadata: {}
-        };
+    it('has the correct layout classes for responsive design', () => {
+        render(<ForgotPasswordPage />);
 
-        (createClient as jest.Mock).mockResolvedValue({
-            auth: {
-                getUser: jest.fn().mockResolvedValue({
-                    data: { user: mockUser },
-                    error: null,
-                }),
-            },
-        });
+        const container = screen.getByTestId('forgot-password-page');
+        expect(container).toHaveClass('container', 'flex', 'h-screen', 'w-full', 'flex-col', 'items-center', 'justify-center');
 
-        const Component = await CompleteProfilePage();
-        render(Component);
-
-        expect(screen.getByText(/We've sent a verification email to/)).toBeInTheDocument();
-    });
-
-    it('does not show email verification notice when email is verified', async () => {
-        const mockUser = {
-            id: 'user123',
-            email: 'test@example.com',
-            email_confirmed_at: new Date().toISOString(),
-            user_metadata: {}
-        };
-
-        (createClient as jest.Mock).mockResolvedValue({
-            auth: {
-                getUser: jest.fn().mockResolvedValue({
-                    data: { user: mockUser },
-                    error: null,
-                }),
-            },
-        });
-
-        const Component = await CompleteProfilePage();
-        render(Component);
-
-        expect(screen.queryByText(/We've sent a verification email to/)).not.toBeInTheDocument();
+        const formContainer = container.querySelector('div.mx-auto');
+        expect(formContainer).toHaveClass('mx-auto', 'flex', 'w-full', 'flex-col', 'justify-center', 'space-y-6', 'sm:w-[350px]');
     });
 });
