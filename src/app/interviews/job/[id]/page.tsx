@@ -89,8 +89,14 @@ export default async function InterviewPage({ params }: { params: Promise<{ id: 
 
                         <p className="text-lg mb-6">{question.questionText}</p>
 
-                        <Button className="w-full">
-                            Start Answering
+                        <Button
+                            className="w-full"
+                            asChild
+                            data-testid={`start-question-${index + 1}-button`}
+                        >
+                            <Link href={`/interviews/job/${interview.id}/questions/${question.id}`}>
+                                Start Answering
+                            </Link>
                         </Button>
                     </Card>
                 ))}
