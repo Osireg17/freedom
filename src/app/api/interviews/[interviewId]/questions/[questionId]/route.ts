@@ -1,4 +1,3 @@
-// src/app/api/interviews/[interviewId]/questions/[questionId]/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { interviews, interviewQuestions } from '@/lib/db/schema';
@@ -8,12 +7,16 @@ import { logServerEvent } from '@/lib/error/logger';
 import { withAxiom } from '@/lib/axiom/server';
 import { getCurrentUser } from '@/lib/actions/auth-actions';
 
+// Define cache configuration
+export const dynamic = 'force-dynamic'; // Default to dynamic rendering
+export const revalidate = 60; // Revalidate cache every 60 seconds
+
 export const GET = withAxiom(async (
-  _req: NextRequest, // Prefix with underscore as it's not used
+  req: NextRequest, // Now we need the request for caching headers
   { params }: { params: Promise<{ interviewId: string; questionId: string }> }
 ) => {
   try {
-    const { interviewId, questionId } = await params; // Await params
+    const { interviewId, questionId } = await params;
     
     // Get authenticated user
     const user = await getCurrentUser();
@@ -68,8 +71,8 @@ export const GET = withAxiom(async (
       columns: { id: true }
     }).then(questions => questions.length);
     
-    // Return question data
-    return NextResponse.json({
+    // Create the response
+    const response = NextResponse.json({
       id: question.id,
       interviewId: question.interviewId,
       questionNumber: question.questionNumber,
@@ -79,6 +82,11 @@ export const GET = withAxiom(async (
       prepTime: 30, // Default prep time, can be customized
       totalQuestions
     });
+    
+    // Add cache control headers
+    response.headers.set('Cache-Control', 'max-age=60, s-maxage=60, stale-while-revalidate=300');
+    
+    return response;
     
   } catch (error) {
     // Log and return error
