@@ -51,7 +51,7 @@ export default function QuestionAnswerPage() {
 
         try {
             setLoading(true)
-            const interviewId = params.id
+            const interviewId = params.interviewId
             const questionId = params.questionId
 
             if (!interviewId || !questionId) {
