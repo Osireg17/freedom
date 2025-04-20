@@ -61,11 +61,6 @@ export const generateJobInterviewQuestionsJob = schemaTask({
     });
 
     try {
-      // Update interview status to processing
-      await updateInterviewStatus(payload.interviewId, 'ongoing');
-      logger.info('Updated interview status to ongoing', { 
-        interviewId: payload.interviewId 
-      });
 
       // Generate prompt based on job information
       const prompt = generateInterviewPrompt(payload);
@@ -87,8 +82,8 @@ export const generateJobInterviewQuestionsJob = schemaTask({
       });
 
       // Update interview status to ready
-      await updateInterviewStatus(payload.interviewId, 'completed');
-      logger.info('Updated interview status to completed', { 
+      await updateInterviewStatus(payload.interviewId, 'ongoing');
+      logger.info('Updated interview status to ongoing', { 
         interviewId: payload.interviewId 
       });
 
