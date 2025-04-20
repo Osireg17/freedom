@@ -18,12 +18,12 @@ export async function generateMetadata() {
     };
 }
 
-export default async function InterviewPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function InterviewPage({ params }: { params: Promise<{ interviewId: string }> }) {
     // Protect this route
     const user = await protectRoute();
 
     const resolvedParams = await params;
-    const interviewId = resolvedParams.id;
+    const interviewId = resolvedParams.interviewId;
 
     // Get the interview
     const interview = await db.query.interviews.findFirst({

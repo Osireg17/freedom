@@ -13,6 +13,11 @@ export default function InterviewProcessingPage() {
     const interviewId = searchParams.get('interviewId');
     const runId = searchParams.get('runId');
 
+    console.log(searchParams.toString());
+
+    console.log('Interview ID:', interviewId);
+    console.log('Run ID:', runId);
+
     if (!interviewId || !runId) {
         return (
             <div className="container max-w-3xl mx-auto py-12">
