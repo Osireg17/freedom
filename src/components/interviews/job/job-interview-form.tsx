@@ -33,8 +33,8 @@ const jobInterviewSchema = z.object({
         .refine(val => countWords(val) >= 50, {
             message: "Please provide a detailed job description (at least 50 words) for better question generation."
         })
-        .refine(val => countWords(val) <= 250, {
-            message: "Job description should not exceed 250 words for optimal question generation."
+        .refine(val => countWords(val) <= 350, {
+            message: "Job description should not exceed 350 words for optimal question generation."
         }),
     yearsExperience: z.string().refine((val) => !isNaN(Number(val)), {
         message: "Please enter a valid number for years of experience."
@@ -140,7 +140,7 @@ export default function JobInterviewForm() {
     const jobDescriptionText = form.watch('jobDescription') || '';
     const jobDescriptionWordCount = countWords(jobDescriptionText);
     const jobDescriptionMinWords = 50;
-    const jobDescriptionMaxWords = 250;
+    const jobDescriptionMaxWords = 350;
 
     // Determine status and colors
     const isBelowMin = jobDescriptionWordCount < jobDescriptionMinWords;
@@ -249,7 +249,7 @@ export default function JobInterviewForm() {
                                     </div>
                                 </FormControl>
                                 <FormDescription>
-                                    Include responsibilities, requirements, and qualifications (50-250 words)
+                                    Include responsibilities, requirements, and qualifications (50-350 words)
                                 </FormDescription>
                                 <FormMessage />
                             </FormItem>

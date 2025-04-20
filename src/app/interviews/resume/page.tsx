@@ -25,7 +25,7 @@ export default async function ResumeInterviewPage() {
                 data-testid="back-button"
                 aria-label="Back to interview types"
             >
-                <Link href="/dashboard/interviews">
+                <Link href="/interviews">
                     <ChevronLeft className="mr-1 h-4 w-4" />
                     Back
                 </Link>

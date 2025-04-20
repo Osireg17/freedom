@@ -22,7 +22,7 @@ export default function InterviewProcessingPage() {
                         The interview request is missing required parameters.
                     </p>
                     <Button asChild>
-                        <Link href="/dashboard/interviews">
+                        <Link href="/interviews">
                             <ArrowLeft className="mr-2 h-4 w-4" />
                             Back to Interviews
                         </Link>
@@ -53,7 +53,7 @@ export default function InterviewProcessingPage() {
 
                     <div className="mt-8">
                         <Button variant="outline" asChild>
-                            <Link href="/dashboard/interviews">
+                            <Link href="/interviews/job">
                                 <ArrowLeft className="mr-2 h-4 w-4" />
                                 Back to Interviews
                             </Link>

@@ -2,10 +2,10 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { Button } from '@/components/ui/button' //
-import { useErrorLogging } from '@/hooks/use-error-logging' //
-import { Card } from '@/components/ui/card' //
-import { ArrowLeft, Eye, EyeOff, Loader2 } from 'lucide-react' // Reverted icon imports
+import { Button } from '@/components/ui/button'
+import { useErrorLogging } from '@/hooks/use-error-logging'
+import { Card } from '@/components/ui/card'
+import { ArrowLeft, Eye, EyeOff, Loader2 } from 'lucide-react'
 import dynamic from 'next/dynamic';
 
 // Define proper types for our question data
@@ -14,28 +14,18 @@ interface QuestionData {
     interviewId: string
     questionNumber: number
     questionText: string
-    questionType: string // Keeping this, as it was used for the badge
+    questionType: string
     timeToAnswer: number
     prepTime: number
     totalQuestions: number
 }
 
-// Explicit props for VideoRecorder (keeping functional improvement)
-interface VideoRecorderProps {
-    interviewId: string;
-    questionId: string;
-    showFace: boolean; // Pass this down
-    prepTime: number;
-    maxResponseTime: number;
-}
-
-// Dynamic import for VideoRecorder
-const VideoRecorder = dynamic<VideoRecorderProps>(
-    () => import('@/components/interviews/question-answering/video-recorder'), // Adjust path if needed
+// Import VideoRecorder with SSR disabled
+const VideoRecorder = dynamic(
+    () => import('@/components/interviews/question-answering/video-recorder'),
     {
         ssr: false,
         loading: () => (
-            // Use original loading style inside the panel
             <div className="flex flex-1 h-full items-center justify-center flex-col text-center bg-background">
                 <Loader2 className="h-8 w-8 animate-spin text-muted-foreground mb-2" />
                 <p className="text-muted-foreground">Loading Recorder...</p>
@@ -47,15 +37,15 @@ const VideoRecorder = dynamic<VideoRecorderProps>(
 export default function QuestionAnswerPage() {
     const params = useParams()
     const router = useRouter()
-    const { logError } = useErrorLogging() //
+    const { logError } = useErrorLogging()
 
     const [question, setQuestion] = useState<QuestionData | null>(null)
     const [loading, setLoading] = useState(true)
-    const [showFace, setShowFace] = useState(true) // State remains here
+    const [showFace, setShowFace] = useState(true)
     const [fetchError, setFetchError] = useState<string | null>(null)
     const [fetchComplete, setFetchComplete] = useState(false)
 
-    // FetchQuestion logic remains the same...
+    // Fetch question data
     const fetchQuestion = useCallback(async () => {
         if (fetchComplete) return
 
@@ -72,11 +62,11 @@ export default function QuestionAnswerPage() {
 
             const response = await fetch(
                 `/api/interviews/${interviewId}/questions/${questionId}?t=${Date.now()}`,
-                { cache: 'no-store' }
+                { cache: 'default' }
             )
 
             if (!response.ok) {
-                const errorData = await response.json().catch(() => ({}));
+                const errorData = await response.json().catch(() => ({}))
                 throw new Error(`Failed to fetch question: ${response.status}. ${errorData?.error?.message || ''}`)
             }
 
@@ -84,7 +74,7 @@ export default function QuestionAnswerPage() {
             setQuestion(data)
             setFetchComplete(true)
         } catch (error) {
-            logError(error, { //
+            logError(error, {
                 context: 'QuestionAnswerPage.fetchQuestion',
                 params
             })
@@ -92,50 +82,48 @@ export default function QuestionAnswerPage() {
         } finally {
             setLoading(false)
         }
-    }, [params.id, params.questionId, logError, fetchComplete]) //
+    }, [params, logError, fetchComplete])
 
+    // Fetch question on component mount
     useEffect(() => {
         fetchQuestion()
     }, [fetchQuestion])
 
-    // Loading state - Use original styling
+    // Loading state
     if (loading) {
         return (
-            <div className="flex h-screen items-center justify-center bg-background"> {/* Use theme background */}
+            <div className="flex h-screen items-center justify-center bg-background">
                 <div className="text-center">
-                    {/* Use theme primary color for spinner border */}
                     <div className="animate-spin h-10 w-10 border-4 border-primary border-t-transparent rounded-full mx-auto mb-4"
                         data-testid="loading-spinner"></div>
-                    <p className="text-muted-foreground">Loading question...</p> {/* Use theme muted text */}
+                    <p className="text-muted-foreground">Loading question...</p>
                 </div>
             </div>
         )
     }
 
-    // Error state - Use original styling
+    // Error state
     if (fetchError) {
         return (
-            <div className="flex h-screen items-center justify-center bg-background p-4"> {/* Use theme background */}
-                {/* Use Card component for consistent styling */}
+            <div className="flex h-screen items-center justify-center bg-background p-4">
                 <Card className="p-8 max-w-md text-center" data-testid="error-card">
-                    <h2 className="text-xl font-bold mb-4 text-destructive-foreground">Error Loading Question</h2> {/* Use theme destructive text */}
-                    <p className="mb-6 text-muted-foreground"> {/* Use theme muted text */}
+                    <h2 className="text-xl font-bold mb-4 text-destructive-foreground">Error Loading Question</h2>
+                    <p className="mb-6 text-muted-foreground">
                         {fetchError}
                     </p>
-                    {/* Default button variant will use theme primary */}
                     <Button onClick={() => router.back()} data-testid="error-back-button">Go Back</Button>
                 </Card>
             </div>
         )
     }
 
-    // Not found state - Use original styling
+    // Not found state
     if (!question) {
         return (
-            <div className="flex h-screen items-center justify-center bg-background p-4"> {/* Use theme background */}
+            <div className="flex h-screen items-center justify-center bg-background p-4">
                 <Card className="p-8 max-w-md text-center" data-testid="not-found-card">
                     <h2 className="text-xl font-bold mb-4">Question Not Found</h2>
-                    <p className="mb-6 text-muted-foreground"> {/* Use theme muted text */}
+                    <p className="mb-6 text-muted-foreground">
                         We couldn&apos;t find the question you&apos;re looking for.
                     </p>
                     <Button onClick={() => router.back()} data-testid="not-found-back-button">Go Back</Button>
@@ -144,15 +132,13 @@ export default function QuestionAnswerPage() {
         )
     }
 
-    // Main content - Restore original structure and classes
+    // Main content
     return (
-        <div className="min-h-screen flex items-center justify-center p-4 bg-background"> {/* Use theme background */}
-            {/* Restore original container */}
+        <div className="min-h-screen flex items-center justify-center p-4 bg-background">
             <div className="w-full max-w-7xl bg-card rounded-lg shadow-xl overflow-hidden flex flex-col h-[85vh]" data-testid="question-answer-page">
-                {/* Restore original Header */}
+                {/* Header */}
                 <div className="bg-background border-b py-2 px-4 flex justify-between items-center flex-shrink-0">
                     <div className="flex items-center">
-                        {/* Add back button */}
                         <Button
                             variant="ghost"
                             size="sm"
@@ -168,53 +154,53 @@ export default function QuestionAnswerPage() {
                             Question {question.questionNumber} of {question.totalQuestions}
                         </div>
                     </div>
-                    {/* Restore original toggle button */}
                     <Button
-                        variant="ghost" // Use ghost variant for subtle look
+                        variant="ghost"
                         size="sm"
                         onClick={() => setShowFace(!showFace)}
                         aria-label={showFace ? "Hide face" : "Show face"}
                         data-testid="toggle-face-button"
-                        className="text-muted-foreground hover:text-foreground" // Use theme text colors
+                        className="text-muted-foreground hover:text-foreground"
                     >
                         {showFace ? <EyeOff className="h-4 w-4 mr-2" /> : <Eye className="h-4 w-4 mr-2" />}
                         {showFace ? "Hide Face" : "Show Face"}
                     </Button>
                 </div>
 
-                {/* Restore Main content flex container */}
+                {/* Main content - 2-column layout */}
                 <div className="flex flex-1 overflow-hidden">
-                    {/* Restore Question panel (Left) */}
-                    <div className="w-2/5 p-6 overflow-y-auto border-r border-border flex flex-col bg-card"> {/* Use theme border and card background */}
-                        {/* Restore question type badge */}
+                    {/* Question panel (Left) */}
+                    <div className="w-2/5 p-6 overflow-y-auto border-r border-border flex flex-col bg-card">
+                        {/* Question type badge */}
                         <div className="mb-4 bg-primary/10 px-3 py-1 rounded-full inline-block self-start">
-                            <span className="text-sm font-medium text-primary"> {/* Use theme primary color */}
+                            <span className="text-sm font-medium text-primary">
                                 {question.questionType.charAt(0).toUpperCase() + question.questionType.slice(1)}
                             </span>
                         </div>
-                        <h1 className="text-xl font-semibold mb-6 text-foreground" data-testid="question-text"> {/* Use theme text */}
+                        <h1 className="text-xl font-semibold mb-6 text-foreground" data-testid="question-text">
                             {question.questionText}
                         </h1>
-                        {/* Restore Tips section */}
-                        <div className="text-sm text-muted-foreground mt-auto"> {/* Use theme muted text */}
-                            <p className="mb-2 font-medium text-foreground">Tips:</p> {/* Use theme text */}
+                        {/* Tips section */}
+                        <div className="text-sm text-muted-foreground mt-auto">
+                            <p className="mb-2 font-medium text-foreground">Tips:</p>
                             <ul className="list-disc list-inside space-y-1">
                                 <li>Use the STAR method (Situation, Task, Action, Result)</li>
                                 <li>Speak clearly and at a moderate pace</li>
                                 <li>Use specific examples from your experience</li>
+                                <li>Keep eye contact with the camera (if shown)</li>
+                                <li>Stay within the time limit</li>
                             </ul>
                         </div>
                     </div>
 
-                    {/* Restore Video recording panel (Right) */}
-                    <div className="w-3/5 bg-background flex flex-col"> {/* Use theme background */}
+                    {/* Video recording panel (Right) */}
+                    <div className="w-3/5 bg-background flex flex-col">
                         <VideoRecorder
                             interviewId={params.id as string}
                             questionId={params.questionId as string}
-                            showFace={showFace} // Pass state down
+                            showFace={showFace}
                             prepTime={question.prepTime ?? 30}
                             maxResponseTime={question.timeToAnswer ?? 120}
-                        // No onToggleFace needed here anymore
                         />
                     </div>
                 </div>
