@@ -1,4 +1,3 @@
-// src/app/api/interviews/[interviewId]/questions/[questionId]/response/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { interviews, interviewQuestions, interviewAnswers } from '@/lib/db/schema';
@@ -8,6 +7,9 @@ import { logServerEvent } from '@/lib/error/logger';
 import { withAxiom } from '@/lib/axiom/server';
 import { getCurrentUser } from '@/lib/actions/auth-actions';
 import { v4 as uuidv4 } from 'uuid';
+import { tasks } from "@trigger.dev/sdk/v3";
+import { createClient } from '@/lib/supabase/server';
+import { recordInterviewTask } from '../../../../../../../../trigger/interviews/record';
 
 
 export const POST = withAxiom(async (
@@ -15,7 +17,7 @@ export const POST = withAxiom(async (
   { params }: { params: { interviewId: string; questionId: string } }
 ) => {
   try {
-    const { interviewId, questionId } = params;
+    const { interviewId, questionId } = await params;
     
     // Get authenticated user
     const user = await getCurrentUser();
@@ -77,10 +79,32 @@ export const POST = withAxiom(async (
     const responseId = uuidv4();
     const filename = `${responseId}.webm`;
     
-    // TODO: Upload video file to storage (Supabase)
-    // For now, we'll simulate this step
-    const audioUrl = `/api/storage/responses/${filename}`;
+    // Initialize Supabase client
+    const supabase = await createClient();
+
+    // Upload video to Supabase storage
+    const audioBuffer = await videoResponse.arrayBuffer();
+    const filePath = `interviews/${user.id}/${interviewId}/${filename}`;
     
+    const { error: uploadError } = await supabase.storage
+      .from('interview-responses')
+      .upload(filePath, audioBuffer, {
+        contentType: 'audio/webm',
+      });
+
+    if (uploadError) {
+      logServerEvent('error', 'Failed to upload interview response', {
+        error: uploadError.message,
+        interviewId,
+        questionId,
+      });
+      
+      return NextResponse.json(
+        ApiErrors.INTERNAL_ERROR('Failed to upload your response. Please try again.').toResponse(),
+        { status: 500 }
+      );
+    }
+
     // Create or update answer record
     const existingAnswer = await db.query.interviewAnswers.findFirst({
       where: and(
@@ -89,12 +113,14 @@ export const POST = withAxiom(async (
       )
     });
     
+    const finalResponseId = existingAnswer ? existingAnswer.id : responseId;
+    
     if (existingAnswer) {
       // Update existing answer
       await db.update(interviewAnswers)
         .set({
           redoAttemptNumber,
-          audioUrl,
+          audioUrl: filePath,
           audioDurationMs: responseTimeMs,
           updatedAt: new Date()
         })
@@ -106,7 +132,7 @@ export const POST = withAxiom(async (
         interviewId,
         interviewQuestionId: questionId,
         redoAttemptNumber,
-        audioUrl,
+        audioUrl: filePath,
         audioDurationMs: responseTimeMs,
         createdAt: new Date(),
         updatedAt: new Date()
@@ -114,27 +140,24 @@ export const POST = withAxiom(async (
     }
     
     // Trigger background job to process the response
-    // This would be implemented with Trigger.dev in a real application
-    // For now, we'll simulate this
-    /*
-    const handle = await tasks.trigger(
-      "analyze-interview-response",
+    const handle = await tasks.trigger<typeof recordInterviewTask>(
+      "record-interview-task",
       {
-        responseId,
+        responseId: finalResponseId,
         interviewId,
         questionId,
         userId: user.id,
-        audioUrl
+        audioPath: filePath
       }
     );
-    */
     
     // Return success response
     return NextResponse.json({
       success: true,
-      responseId,
+      responseId: finalResponseId,
       status: 'processing',
-      message: 'Your response has been submitted and is being analyzed.'
+      message: 'Your response has been submitted and is being analyzed.',
+      runId: handle.id
     });
     
   } catch (error) {
