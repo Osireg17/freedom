@@ -30,7 +30,7 @@
         "@axiomhq/nextjs": "^0.1.1",
         "@axiomhq/react": "^0.1.1",
         "@clerk/elements": "^0.23.7",
-        "@deepgram/sdk": "^3.11.2",
+        "@deepgram/sdk": "^3.12.1",
         "@hookform/resolvers": "^4.1.3",
         "@logtail/browser": "^0.5.2",
         "@logtail/js": "^0.5.2",
