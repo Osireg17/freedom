@@ -1,3 +1,5 @@
+// File: app/api/interviews/[interviewId]/questions/[questionId]/response/route.ts
+
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { interviews, interviewQuestions, interviewAnswers } from '@/lib/db/schema';
@@ -8,16 +10,15 @@ import { withAxiom } from '@/lib/axiom/server';
 import { getCurrentUser } from '@/lib/actions/auth-actions';
 import { v4 as uuidv4 } from 'uuid';
 import { tasks } from "@trigger.dev/sdk/v3";
-import { createClient } from '@/lib/supabase/server';
+import { supabaseAdmin } from '@/lib/supabase/supabaseAdmin';
 import { recordInterviewTask } from '../../../../../../../../trigger/interviews/record';
-
 
 export const POST = withAxiom(async (
   req: NextRequest,
   { params }: { params: { interviewId: string; questionId: string } }
 ) => {
   try {
-    const { interviewId, questionId } = await params;
+    const { interviewId, questionId } = params;
     
     // Get authenticated user
     const user = await getCurrentUser();
@@ -79,17 +80,18 @@ export const POST = withAxiom(async (
     const responseId = uuidv4();
     const filename = `${responseId}.webm`;
     
-    // Initialize Supabase client
-    const supabase = await createClient();
-
-    // Upload video to Supabase storage
-    const audioBuffer = await videoResponse.arrayBuffer();
+    // Use a more structured path that clearly separates user data
     const filePath = `interviews/${user.id}/${interviewId}/${filename}`;
     
-    const { error: uploadError } = await supabase.storage
+    // Upload video to Supabase storage using the admin client
+    const audioBuffer = await videoResponse.arrayBuffer();
+    
+    // Use supabaseAdmin instead of the regular client to bypass RLS
+    const { error: uploadError } = await supabaseAdmin.storage
       .from('interview-responses')
       .upload(filePath, audioBuffer, {
         contentType: 'audio/webm',
+        upsert: true // Use upsert to handle retry cases
       });
 
     if (uploadError) {
@@ -97,6 +99,8 @@ export const POST = withAxiom(async (
         error: uploadError.message,
         interviewId,
         questionId,
+        userId: user.id,
+        path: filePath
       });
       
       return NextResponse.json(
@@ -139,6 +143,11 @@ export const POST = withAxiom(async (
       });
     }
     
+    // Create a signed URL for the uploaded file that will work for client access
+    const { data: signedUrlData } = await supabaseAdmin.storage
+      .from('interview-responses')
+      .createSignedUrl(filePath, 3600); // 1 hour expiry
+    
     // Trigger background job to process the response
     const handle = await tasks.trigger<typeof recordInterviewTask>(
       "record-interview-task",
@@ -150,21 +159,30 @@ export const POST = withAxiom(async (
         audioPath: filePath
       }
     );
-    
+    logServerEvent('info', 'Interview response submitted', {
+      responseId: finalResponseId,
+      interviewId,
+      questionId,
+      userId: user.id
+    });
+
     // Return success response
     return NextResponse.json({
       success: true,
       responseId: finalResponseId,
       status: 'processing',
       message: 'Your response has been submitted and is being analyzed.',
-      runId: handle.id
+      runId: handle.id,
+      audioUrl: signedUrlData?.signedUrl // Include the signed URL for immediate access
     });
     
   } catch (error) {
-    // Log and return error
+    // Log and return error with more detailed information
     logServerEvent('error', 'Failed to submit question response', {
       error: error instanceof Error ? error.message : String(error),
       stack: error instanceof Error ? error.stack : undefined,
+      params: params,
+      time: new Date().toISOString()
     });
     
     return NextResponse.json(

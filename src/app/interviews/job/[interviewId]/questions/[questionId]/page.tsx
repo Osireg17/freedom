@@ -60,6 +60,9 @@ export default function QuestionAnswerPage() {
                 return
             }
 
+            // Log the params for debugging
+            console.log('Fetching question with params:', { interviewId, questionId });
+
             const response = await fetch(
                 `/api/interviews/${interviewId}/questions/${questionId}?t=${Date.now()}`,
                 { cache: 'default' }
@@ -196,7 +199,7 @@ export default function QuestionAnswerPage() {
                     {/* Video recording panel (Right) */}
                     <div className="w-3/5 bg-background flex flex-col">
                         <VideoRecorder
-                            interviewId={params.id as string}
+                            interviewId={params.interviewId as string}
                             questionId={params.questionId as string}
                             showFace={showFace}
                             prepTime={question.prepTime ?? 30}

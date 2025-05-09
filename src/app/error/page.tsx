@@ -5,10 +5,10 @@ import { Button } from '@/components/ui/button';
 import { AlertCircle, Home, ArrowLeft } from 'lucide-react';
 
 interface ErrorPageProps {
-    searchParams: {
+    searchParams: Promise<{
         code?: string;
         message?: string;
-    };
+    }>;
 }
 
 export const metadata: Metadata = {
@@ -16,7 +16,8 @@ export const metadata: Metadata = {
     description: 'Something went wrong',
 };
 
-export default function ErrorPage({ searchParams }: ErrorPageProps) {
+export default async function ErrorPage(props: ErrorPageProps) {
+    const searchParams = await props.searchParams;
     const errorCode = searchParams.code || 'generic_error';
 
     // Define error titles and messages based on error code
