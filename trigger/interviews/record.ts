@@ -35,7 +35,7 @@ export const recordInterviewTask = schemaTask({
 
     try {
       // Initialize Deepgram with v3 SDK
-      const deepgram = createDeepgramClient(process.env.DEEPGRAM_API_KEY as string);
+      const deepgram = createDeepgramClient(process.env.NEXT_PUBLIC_DEEPGRAM_API_KEY as string);
 
       // 1. Get audio from storage
       const { data: audioData, error: downloadError } = await supabaseAdmin.storage
