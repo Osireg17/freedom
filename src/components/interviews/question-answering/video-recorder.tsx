@@ -315,12 +315,18 @@ export default function VideoRecorder({
         setStatus('submitting')
 
         try {
+            // Ensure we're using the correct interview ID for submission
+            if (!interviewId) {
+                throw new Error('Missing interview ID for submission')
+            }
+
             const formData = new FormData()
             formData.append('videoResponse', recordedBlob, 'answer.webm')
             const recordedDuration = Math.min(maxResponseTime, maxResponseTime - recordTimeRemaining)
             formData.append('responseTimeMs', (recordedDuration * 1000).toString())
             formData.append('redoAttemptNumber', '0') // TODO: Implement retry count logic
 
+            // Use the interviewId from props
             const response = await fetch(
                 `/api/interviews/${interviewId}/questions/${questionId}/response`,
                 {
@@ -560,6 +566,11 @@ export default function VideoRecorder({
                 return null
         }
     }
+
+    // Log information about the current props for debugging
+    useEffect(() => {
+        console.log('VideoRecorder props:', { interviewId, questionId, showFace, prepTime, maxResponseTime });
+    }, [interviewId, questionId, showFace, prepTime, maxResponseTime]);
 
     return (
         <div className="flex flex-col h-full p-6" data-testid="video-recorder">

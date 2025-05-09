@@ -10,7 +10,7 @@ import { cookies } from 'next/headers';
  */
 export async function updateSupabaseSession() {
   // Get the request cookies
-  const cookiesInstance = cookies();
+  const cookiesInstance = await cookies();
   const requestCookies = await cookiesInstance;
   // Create a NextResponse to apply any cookie changes
   const response = NextResponse.next();
