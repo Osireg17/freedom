@@ -5,6 +5,7 @@ import { PlusCircle, PlayCircle } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
+import Link from 'next/link';
 
 interface ActionCenterProps {
     ongoingInterview?: {
@@ -59,12 +60,13 @@ export function ActionCenter({ ongoingInterview }: ActionCenterProps) {
                         className="h-auto py-6 flex flex-col items-center gap-3"
                         data-testid="new-job-interview-button"
                         aria-label="Create a new job-based interview"
+
                     >
                         <PlusCircle className="h-6 w-6" />
-                        <div className="text-center">
+                        <Link href="/interviews/job" className="text-center">
                             <div className="font-medium text-base">Job Interview</div>
                             <div className="text-sm text-muted-foreground">Based on job description</div>
-                        </div>
+                        </Link>
                     </Button>
 
                     <Button

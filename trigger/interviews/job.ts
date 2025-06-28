@@ -3,11 +3,11 @@ import { db } from '@/lib/db';
 import { interviews, interviewQuestions } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
 import OpenAI from 'openai';
+import { zodTextFormat } from 'openai/helpers/zod';
 import { schemaTask, logger, configure } from '@trigger.dev/sdk/v3';
-import { v4 as uuidv4 } from 'uuid';
 import { z } from 'zod';
-
-
+import { JobInterviewPayloadSchema } from '@/types/interview';
+import { generateInterviewPrompt } from '@/lib/middleware/create-prompts';
 
 // Configure Trigger.dev
 configure({
@@ -24,25 +24,18 @@ const openai = new OpenAI({
   apiKey: apiKey,
 });
 
-// Define schema for payload validation
-const JobInterviewPayloadSchema = z.object({
-  interviewId: z.string(),
-  userId: z.string(),
-  jobTitle: z.string().min(2),
-  companyName: z.string().min(2),
-  jobDescription: z.string().min(50),
-  yearsExperience: z.number().min(0),
-  timeToAnswer: z.number().min(30).max(300),
-  prepTime: z.number().min(0).max(300),
+// Define structured output schema for AI response
+const QuestionSchema = z.object({
+  question: z.string().describe("Detailed, open-ended interview question"),
+  category: z.string().describe("The specific key competency area this question assesses"),
+  type: z.enum(['behavioral', 'skill-based', 'situational']).describe("The type of question being asked")
 });
 
-type JobInterviewPayload = z.infer<typeof JobInterviewPayloadSchema>;
+const InterviewQuestionsResponseSchema = z.object({
+  questions: z.array(QuestionSchema).length(5).describe("Array of exactly 5 interview questions")
+});
 
-interface GeneratedQuestion {
-  question: string;
-  category: string;
-  type: 'behavioral' | 'technical' | 'situational'| 'other';
-}
+type GeneratedQuestion = z.infer<typeof QuestionSchema>;
 
 interface TaskResult {
   success: boolean;
@@ -61,22 +54,21 @@ export const generateJobInterviewQuestionsJob = schemaTask({
     });
 
     try {
-
       // Generate prompt based on job information
       const prompt = generateInterviewPrompt(payload);
       logger.info('Generated interview prompt', { 
         prompt: prompt.substring(0, 200) + '...' // Log just the beginning for brevity
       });
 
-      // Get AI response with questions
-      const questions = await generateQuestionsWithOpenAI(prompt);
+      // Get AI response with structured questions
+      const questionsResponse = await generateQuestionsWithOpenAI(prompt);
       logger.info('Generated questions successfully', {
         interviewId: payload.interviewId,
-        questionCount: questions.length,
+        questionCount: questionsResponse.questions.length,
       });
 
       // Store questions in database
-      await storeInterviewQuestions(payload.interviewId, questions);
+      await storeInterviewQuestions(payload.interviewId, questionsResponse.questions);
       logger.info('Stored interview questions in database', { 
         interviewId: payload.interviewId 
       });
@@ -90,7 +82,7 @@ export const generateJobInterviewQuestionsJob = schemaTask({
       return {
         success: true,
         interviewId: payload.interviewId,
-        questions,
+        questions: questionsResponse.questions,
       };
     } catch (error) {
       return handleTaskError(error, payload.interviewId);
@@ -98,113 +90,60 @@ export const generateJobInterviewQuestionsJob = schemaTask({
   },
 });
 
-// Helper function to generate the interview prompt
-// Helper function to generate the interview prompt - INDUSTRY AGNOSTIC
-function generateInterviewPrompt(payload: JobInterviewPayload): string {
-  const context = `
-CONTEXT:
-- Company Name: ${payload.companyName}
-- Position Title: ${payload.jobTitle}
-- Required Experience Level: ${payload.yearsExperience} years
-- Job Description: ${payload.jobDescription}
-`;
 
-  const instructions = `
-INSTRUCTIONS:
-Based *only* on the provided CONTEXT (especially the Job Description), generate 5 high-quality interview questions suitable for a one-way video interview screen in a similar manner to hirevue for the specific Position Title at the specified Company Name.
-
-The questions MUST:
-1. Be **directly relevant** to the responsibilities, skills, and qualifications outlined in the Job Description.
-2. Be appropriate for a candidate with the specified Required Experience Level.
-3. Assess a mix of behavioral competencies and role-specific skills/knowledge identified *from the Job Description*. Aim for a balance (e.g., 3 behavioral, 2 skill-based/situational, but adjust based on the role's nature).
-4. Elicit detailed responses, encouraging the STAR method (Situation, Task, Action, Result) for behavioral questions where applicable.
-5. Cover diverse key competency areas **derived from the Job Description** (e.g., problem-solving, communication, teamwork, leadership, analytical skills, specific domain knowledge, technical/practical abilities if mentioned).
-`;
-
-  const guidelines = `
-IMPORTANT GUIDELINES:
-- **Derive Key Competencies:** Identify the core skills, knowledge areas, and behavioral traits required for *this specific role* by analyzing the Job Description. Base your questions on these derived competencies.
-- **Skill/Knowledge Questions:** If the Job Description mentions required technical skills, practical abilities, certifications, or specific knowledge areas (e.g., financial modeling, specific regulations, laboratory techniques, software tools), formulate questions to assess proficiency or experience in those *exact areas* or related fields and tasks associated with the role.
-- **Situational Questions:** Create situational questions that assess how candidates would approach hypothetical scenarios relevant to the role, based on the Job Description. These should be realistic and aligned with the responsibilities outlined.
-- **Behavioral Questions:** Frame behavioral questions around scenarios relevant to the responsibilities and challenges likely faced in *this role*, based on the Job Description.
-- **Tool/Methodology Agnosticism:** If asking about experience with specific tools, software, or methodologies mentioned in the Job Description, phrase the question to **allow candidates to discuss analogous experience** if they haven't used the exact item (e.g., "Describe your experience with project management software like [Tool from JD], or similar tools..." or "Tell me about a time you used data analysis techniques to..."). **Avoid using company-specific jargon or internal tool names** unless clearly defined as a public requirement in the Job Description.
-- **Experience Level:** Adjust the complexity and scope of the questions to match the Required Experience Level. More senior roles might require questions about strategy, leadership, or complex problem-solving.
-- **Clarity and Focus:** Ensure questions are clear, unambiguous, and focused on assessing a specific competency or skill relevant to the Job Description.
-- **Time Constraint:** Questions should be answerable within approximately ${payload.timeToAnswer} seconds.
-`;
-
-  const responseFormat = `
-RESPONSE FORMAT (JSON array):
-{
-  "questions": [
-    {
-      "question": "Detailed, open-ended question reflecting the guidelines and derived competencies.",
-      "category": "The specific key competency area derived from the Job Description that this question assesses (e.g., 'Project Management', 'Client Communication', 'Data Analysis', 'Regulatory Compliance', 'Machine Operation', 'Software Development Skill X')",
-      "type": "behavioral" // Use 'behavioral' for questions primarily assessing past behavior or handling situations.
-           // or "skill-based" // Use 'skill-based' for questions primarily assessing specific knowledge, technical/practical ability, or application of skills.
-           // or "situational" // Use 'situational' for hypothetical scenarios assessing judgment or approach. Choose the most appropriate type.
-    }
-    // ... total of 5 questions
-  ]
-}
-`;
-
-  return `You are an expert AI assistant tasked with generating fair and relevant screening interview questions for a one-way video interview. You will receive context about a specific job role at a specific company. Your goal is to create questions based *strictly* on the provided Job Description and role requirements, suitable for candidates from any background who meet the qualifications.
-${context}
-${instructions}
-${guidelines}
-${responseFormat}
-Generate the 5 questions now based *only* on the provided context.`.trim();
-}
-
-// Helper function to generate questions with OpenAI
-async function generateQuestionsWithOpenAI(prompt: string): Promise<GeneratedQuestion[]> {
+// Helper function to generate questions with OpenAI Responses API
+async function generateQuestionsWithOpenAI(prompt: string): Promise<z.infer<typeof InterviewQuestionsResponseSchema>> {
   try {
-    const completion = await openai.chat.completions.create({
+    const response = await openai.responses.parse({
       model: "gpt-4.1-mini",
-      messages: [
+      input: [
         {
           role: "system",
-          content: "You are an expert interviewer who creates detailed, industry-specific behavioral interview questions."
+          content: "You are an expert interviewer who creates detailed, industry-specific behavioral interview questions. You must generate exactly 5 questions that follow the structured format provided."
         },
         {
           role: "user",
           content: prompt
         }
       ],
-      response_format: {
-        "type": "json_object"
+      text: {
+        format: zodTextFormat(InterviewQuestionsResponseSchema, "interview_questions"),
       },
       temperature: 0.8,
-      max_completion_tokens: 2000,
+      max_output_tokens: 2000,
       top_p: 1,
-      frequency_penalty: 0.3,
-      presence_penalty: 0.6
     });
 
-    const responseText = completion.choices[0].message.content;
-    if (!responseText) {
-      throw new Error('Empty response from OpenAI');
+    // Check if response completed successfully
+    if (response.status !== "completed") {
+      throw new Error(`Response incomplete: ${response.status}`);
     }
 
-    try {
-      const parsed = JSON.parse(responseText);
-      if (!parsed.questions || !Array.isArray(parsed.questions)) {
-        throw new Error('Invalid response format: expected array of questions');
-      }
-
-      return parsed.questions.map((q: { question: string; category: string; type: 'behavioral' | 'technical' }) => ({
-        question: q.question,
-        category: q.category,
-        type: q.type
-      }));
-    } catch (parseError) {
-      logger.error('Error parsing OpenAI response', { responseText, error: parseError });
-      throw new Error('Failed to parse OpenAI response as JSON');
+    // Handle potential refusal
+    const messageOutput = response.output[0];
+    if (messageOutput.type !== 'message') {
+      throw new Error('Unexpected output type from OpenAI');
     }
+
+    const content = messageOutput.content[0];
+    if (content.type === 'refusal') {
+      throw new Error(`OpenAI refused the request: ${content.refusal}`);
+    }
+
+    // Return the parsed structured data
+    if (!response.output_parsed) {
+      throw new Error('Failed to parse structured response from OpenAI');
+    }
+    return response.output_parsed;
+
   } catch (error) {
-    logger.error('Error generating questions with OpenAI', { error });
-    throw new Error('Failed to generate questions with OpenAI');
+    logger.error('Error generating questions with OpenAI Responses API', { error });
+    
+    // Provide more specific error context
+    if (error instanceof Error) {
+      throw new Error(`Failed to generate questions: ${error.message}`);
+    }
+    throw new Error('Failed to generate questions with OpenAI Responses API');
   }
 }
 
@@ -220,18 +159,17 @@ async function updateInterviewStatus(interviewId: string, status: 'not_started' 
 
 // Helper function to store interview questions in database
 async function storeInterviewQuestions(interviewId: string, questions: GeneratedQuestion[]) {
-  // Insert each question into the database
   for (let i = 0; i < questions.length; i++) {
     const question = questions[i];
     
     await db.insert(interviewQuestions).values({
-      id: uuidv4(),
       interviewId,
       questionNumber: i + 1,
       questionText: question.question,
-      questionType: ['behavioral', 'technical', 'situational'].includes(question.type) 
-      ? question.type 
-      : 'other',
+      questionType: question.type === 'skill-based' ? 'technical' : 
+        ['behavioral', 'situational'].includes(question.type) 
+          ? question.type as 'behavioral' | 'situational'
+          : 'other',
     });
   }
 }
