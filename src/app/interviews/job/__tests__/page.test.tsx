@@ -56,7 +56,7 @@ describe('JobInterviewPage', () => {
 
         const backButton = screen.getByTestId('back-button');
         expect(backButton).toHaveTextContent('Back');
-        expect(backButton.closest('a')).toHaveAttribute('href', '/dashboard/interviews');
+        expect(backButton.closest('a')).toHaveAttribute('href', '/dashboard');
     });
 
     it('renders all three "How It Works" cards', async () => {

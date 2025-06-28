@@ -44,6 +44,7 @@ export default function VideoRecorder({
     const [recordedBlob, setRecordedBlob] = useState<Blob | null>(null)
     const [recordedVideoURL, setRecordedVideoURL] = useState<string | null>(null)
     const [countdown, setCountdown] = useState(3)
+    const [redoAttempts, setRedoAttempts] = useState(0)
 
     const webcamRef = useRef<Webcam>(null)
     const mediaRecorderRef = useRef<MediaRecorder | null>(null)
@@ -69,6 +70,7 @@ export default function VideoRecorder({
         if (status === 'idle') {
             startPrepTimer()
         }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [])
 
     // Start preparation timer
@@ -122,7 +124,7 @@ export default function VideoRecorder({
         chunksRef.current = []
 
         if (!webcamRef.current?.stream) {
-            toast.error('Camera access is required to record')
+            toast.error('Microphone access is required to record')
             setStatus('error')
             return
         }
@@ -182,6 +184,7 @@ export default function VideoRecorder({
             setStatus('error')
             toast.error('Failed to start recording. Please check your camera permissions.')
         }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [interviewId, questionId, logError, maxResponseTime])
 
     // Function to set up audio analysis for visualizing audio levels
@@ -249,6 +252,15 @@ export default function VideoRecorder({
 
     // Function to retry recording
     const retryRecording = () => {
+        const MAX_REDOS = 3
+
+        if (redoAttempts >= MAX_REDOS) {
+            toast.error(`Maximum number of retries (${MAX_REDOS}) reached. Please submit your current response.`)
+            return
+        }
+
+        setRedoAttempts(prev => prev + 1)
+
         try {
             // Release old recording URL
             if (recordedVideoURL) {
@@ -324,7 +336,7 @@ export default function VideoRecorder({
             formData.append('videoResponse', recordedBlob, 'answer.webm')
             const recordedDuration = Math.min(maxResponseTime, maxResponseTime - recordTimeRemaining)
             formData.append('responseTimeMs', (recordedDuration * 1000).toString())
-            formData.append('redoAttemptNumber', '0') // TODO: Implement retry count logic
+            formData.append('redoAttemptNumber', redoAttempts.toString())
 
             // Use the interviewId from props
             const response = await fetch(
@@ -450,29 +462,31 @@ export default function VideoRecorder({
         return (
             <>
                 <div className="relative w-full h-full bg-black">
-                    {showFace ? (
-                        <Webcam
-                            audio={true}
-                            ref={webcamRef}
-                            videoConstraints={videoConstraints}
-                            muted={true}
-                            className="w-full h-full object-cover"
-                            data-testid="webcam-video"
-                            onUserMediaError={(error) => {
-                                logError(error, {
-                                    context: 'VideoRecorder.webcam',
-                                    interviewId
-                                })
-                                setStatus('error')
-                                toast.error('Failed to access camera or microphone')
-                            }}
-                        />
-                    ) : (
+                    {/* Always render Webcam component to ensure stream access, but hide when showFace is false */}
+                    <Webcam
+                        audio={true}
+                        ref={webcamRef}
+                        videoConstraints={videoConstraints}
+                        muted={true}
+                        className={showFace ? "w-full h-full object-cover" : "w-full h-full object-cover opacity-0 absolute"}
+                        data-testid="webcam-video"
+                        onUserMediaError={(error) => {
+                            logError(error, {
+                                context: 'VideoRecorder.webcam',
+                                interviewId
+                            })
+                            setStatus('error')
+                            toast.error('Failed to access camera or microphone')
+                        }}
+                    />
+
+                    {/* Show placeholder overlay when camera preview is hidden */}
+                    {!showFace && (
                         <div className="absolute inset-0 flex items-center justify-center">
                             <div className="text-center p-4 bg-background/80 rounded-lg">
                                 <Camera className="h-16 w-16 mx-auto text-muted-foreground" />
                                 <p className="mt-2 text-muted-foreground">
-                                    {webcamRef.current?.stream ? "Camera is active but preview is hidden" : "Camera preview is hidden"}
+                                    Camera is active but preview is hidden
                                 </p>
                             </div>
                         </div>
@@ -545,10 +559,19 @@ export default function VideoRecorder({
                     </Button>
                 )
             case 'reviewing':
+                const MAX_REDOS = 3
+                const remainingRedos = MAX_REDOS - redoAttempts
+                const canRetry = redoAttempts < MAX_REDOS
+
                 return (
                     <>
-                        <Button variant="outline" onClick={retryRecording} data-testid="retry-button">
-                            Record Again
+                        <Button
+                            variant="outline"
+                            onClick={retryRecording}
+                            disabled={!canRetry}
+                            data-testid="retry-button"
+                        >
+                            {canRetry ? `Record Again (${remainingRedos} left)` : 'Max retries reached'}
                         </Button>
                         <Button onClick={submitRecording} data-testid="submit-button">
                             Submit Response

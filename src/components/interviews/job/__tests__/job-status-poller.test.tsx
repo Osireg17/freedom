@@ -6,117 +6,141 @@ import { useErrorLogging } from '@/hooks/use-error-logging';
 
 // Mock dependencies
 jest.mock('next/navigation', () => ({
-    useRouter: jest.fn()
+	useRouter: jest.fn(),
 }));
 
 jest.mock('sonner', () => ({
-    toast: {
-        error: jest.fn()
-    }
+	toast: {
+		error: jest.fn(),
+	},
 }));
 
-jest.mock('../../../../hooks/use-error-logging', () => ({
-    useErrorLogging: jest.fn()
+jest.mock('@/hooks/use-error-logging', () => ({
+	useErrorLogging: jest.fn(),
 }));
 
 describe('JobStatusPoller', () => {
-    const mockRouter = { push: jest.fn() };
-    const mockLogError = jest.fn();
+	const mockRouter = { push: jest.fn(), refresh: jest.fn() };
+	const mockLogError = jest.fn();
 
-    beforeEach(() => {
-        jest.useFakeTimers();
-        jest.clearAllMocks();
+	beforeEach(() => {
+		jest.useFakeTimers();
+		jest.clearAllMocks();
 
-        (useRouter as jest.Mock).mockReturnValue(mockRouter);
-        (useErrorLogging as jest.Mock).mockReturnValue({ logError: mockLogError });
+		(useRouter as jest.Mock).mockReturnValue(mockRouter);
+		(useErrorLogging as jest.Mock).mockReturnValue({ logError: mockLogError });
 
-        // Mock fetch
-        global.fetch = jest.fn();
-    });
+		// Mock fetch
+		global.fetch = jest.fn();
+	});
 
-    afterEach(() => {
-        jest.useRealTimers();
-    });
+	afterEach(() => {
+		jest.useRealTimers();
+	});
 
-    it('renders with initial processing state', () => {
-        (global.fetch as jest.Mock).mockResolvedValueOnce({
-            ok: true,
-            json: async () => ({ status: 'processing' })
-        });
+	it('renders with initial processing state', () => {
+		(global.fetch as jest.Mock).mockResolvedValueOnce({
+			ok: true,
+			json: async () => ({ status: 'processing' }),
+		});
 
-        render(<JobStatusPoller interviewId="interview-123" runId="run-456" />);
+		render(<JobStatusPoller interviewId="interview-123" runId="run-456" />);
 
-        expect(screen.getByTestId('job-status-poller')).toBeInTheDocument();
-        expect(screen.getByText('Generating your personalized interview questions...')).toBeInTheDocument();
-    });
+		expect(screen.getByTestId('job-status-poller')).toBeInTheDocument();
+		expect(
+			screen.getByText('Generating your personalized interview questions...')
+		).toBeInTheDocument();
+	});
 
-    it('updates to completed state and redirects when status is completed', async () => {
-        (global.fetch as jest.Mock).mockResolvedValueOnce({
-            ok: true,
-            json: async () => ({ status: 'completed' })
-        });
+	it('updates to completed state and redirects when status is completed', async () => {
+		(global.fetch as jest.Mock).mockResolvedValueOnce({
+			ok: true,
+			json: async () => ({ status: 'completed' }),
+		});
 
-        render(<JobStatusPoller interviewId="interview-123" runId="run-456" />);
+		render(<JobStatusPoller interviewId="interview-123" runId="run-456" />);
 
-        await waitFor(() => {
-            expect(screen.getByText('Interview ready! Redirecting...')).toBeInTheDocument();
-        });
+		await waitFor(() => {
+			expect(
+				screen.getByText('Interview ready! Redirecting...')
+			).toBeInTheDocument();
+		});
 
-        act(() => {
-            jest.advanceTimersByTime(1000);
-        });
+		act(() => {
+			jest.advanceTimersByTime(1000); // For the redirect timeout
+		});
 
-        expect(mockRouter.push).toHaveBeenCalledWith('/interviews/job/interview-123');
-    });
+		await waitFor(() => {
+			expect(mockRouter.push).toHaveBeenCalledWith(
+				'/interviews/job/interview-123'
+			);
+		});
+	});
 
-    it('shows error state when API returns error status', async () => {
-        (global.fetch as jest.Mock).mockResolvedValueOnce({
-            ok: true,
-            json: async () => ({ status: 'error', message: 'Custom error message' })
-        });
+	it('shows error state when API returns error status', async () => {
+		(global.fetch as jest.Mock).mockResolvedValueOnce({
+			ok: true,
+			json: async () => ({
+				status: 'error',
+				message: 'Custom error message',
+			}),
+		});
 
-        render(<JobStatusPoller interviewId="interview-123" runId="run-456" />);
+		render(<JobStatusPoller interviewId="interview-123" runId="run-456" />);
 
-        await waitFor(() => {
-            expect(screen.getByText('There was an issue generating your interview questions.')).toBeInTheDocument();
-        });
+		await waitFor(() => {
+			expect(
+				screen.getByText(
+					'There was an issue generating your interview questions.'
+				)
+			).toBeInTheDocument();
+		});
 
-        expect(toast.error).toHaveBeenCalledWith('Custom error message');
-    });
+		expect(toast.error).toHaveBeenCalledWith('Custom error message');
+	});
 
-    it('continues polling when status is still processing', async () => {
-        (global.fetch as jest.Mock).mockResolvedValueOnce({
-            ok: true,
-            json: async () => ({ status: 'processing' })
-        });
+	it('continues polling when status is still processing', async () => {
+		(global.fetch as jest.Mock).mockResolvedValue({
+			ok: true,
+			json: async () => ({ status: 'processing' }),
+		});
 
-        render(<JobStatusPoller interviewId="interview-123" runId="run-456" />);
+		render(<JobStatusPoller interviewId="interview-123" runId="run-456" />);
 
-        // First poll happens immediately
-        expect(global.fetch).toHaveBeenCalledTimes(1);
+		// First poll happens immediately
+		expect(global.fetch).toHaveBeenCalledTimes(1);
 
-        // Advance timers to trigger next poll
-        act(() => {
-            jest.advanceTimersByTime(10000);
-        });
+		// Advance timers to trigger next poll
+		act(() => {
+			jest.advanceTimersByTime(3000);
+		});
 
-        expect(global.fetch).toHaveBeenCalledTimes(1);
-    });
+		await waitFor(() => {
+			expect(global.fetch).toHaveBeenCalledTimes(2);
+		});
+	});
 
-    it('handles fetch errors and continues polling', async () => {
-        (global.fetch as jest.Mock).mockRejectedValueOnce(new Error('Network error'));
+	it('handles fetch errors and continues polling', async () => {
+		(global.fetch as jest.Mock)
+			.mockRejectedValueOnce(new Error('Network error'))
+			.mockResolvedValueOnce({
+				ok: true,
+				json: async () => ({ status: 'processing' }),
+			});
 
-        render(<JobStatusPoller interviewId="interview-123" runId="run-456" />);
+		render(<JobStatusPoller interviewId="interview-123" runId="run-456" />);
 
-        await waitFor(() => {
-            expect(mockLogError).toHaveBeenCalled();
-        });
+		await waitFor(() => {
+			expect(mockLogError).toHaveBeenCalledWith(new Error('Network error'));
+		});
 
-        // Should try to poll again after error
-        act(() => {
-            jest.advanceTimersByTime(10000);
-        });
+		// Should try to poll again after error
+		act(() => {
+			jest.advanceTimersByTime(3000);
+		});
 
-        expect(global.fetch).toHaveBeenCalledTimes(2);
-    });
+		await waitFor(() => {
+			expect(global.fetch).toHaveBeenCalledTimes(2);
+		});
+	});
 });

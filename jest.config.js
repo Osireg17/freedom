@@ -17,6 +17,7 @@ const customJestConfig = {
         '^@/app/(.*)$': '<rootDir>/src/app/$1',
         '^@/lib/(.*)$': '<rootDir>/src/lib/$1',
         '^@/config/(.*)$': '<rootDir>/src/config/$1',
+        '^@/hooks/(.*)$': '<rootDir>/src/hooks/$1',
     },
     testPathIgnorePatterns: [
         '<rootDir>/node_modules/',
