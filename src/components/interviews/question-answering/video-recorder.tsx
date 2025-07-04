@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
 import { useErrorLogging } from '@/hooks/use-error-logging'
 import { toast } from 'sonner'
-import { Mic, Camera, Loader2, VideoOff } from 'lucide-react'
+import { Camera, Loader2, VideoOff } from 'lucide-react'
 
 interface VideoRecorderProps {
     interviewId: string
@@ -40,11 +40,12 @@ export default function VideoRecorder({
     const [recordTimeRemaining, setRecordTimeRemaining] = useState(maxResponseTime)
     const [prepProgress, setPrepProgress] = useState(0)
     const [recordProgress, setRecordProgress] = useState(0)
-    const [audioLevel, setAudioLevel] = useState(0)
     const [recordedBlob, setRecordedBlob] = useState<Blob | null>(null)
     const [recordedVideoURL, setRecordedVideoURL] = useState<string | null>(null)
     const [countdown, setCountdown] = useState(3)
     const [redoAttempts, setRedoAttempts] = useState(0)
+    const [videoConstraints, setVideoConstraints] = useState<MediaTrackConstraints | null>(null)
+    const [webcamKey, setWebcamKey] = useState(0)
 
     const webcamRef = useRef<Webcam>(null)
     const mediaRecorderRef = useRef<MediaRecorder | null>(null)
@@ -58,20 +59,44 @@ export default function VideoRecorder({
     const audioStreamRef = useRef<MediaStream | null>(null)
     const animationFrameRef = useRef<number | null>(null)
 
+    useEffect(() => {
+        const selectedCamera = localStorage.getItem('selectedCamera')
+        const selectedMicrophone = localStorage.getItem('selectedMicrophone')
+
+        const constraints: MediaTrackConstraints = {
+            width: 1280,
+            height: 720,
+            facingMode: 'user'
+        }
+
+        if (selectedCamera) {
+            constraints.deviceId = { exact: selectedCamera }
+        }
+
+        setVideoConstraints(constraints)
+        setWebcamKey(prev => prev + 1)
+
+        if (selectedMicrophone) {
+            console.log('Selected microphone ID:', selectedMicrophone)
+        }
+    }, [])
+
     // Set up webcam constraints
-    const videoConstraints = {
-        width: 1280,
-        height: 720,
-        facingMode: "user"
+    const audioConstraints = {
+        deviceId: localStorage.getItem('selectedMicrophone') ? { exact: localStorage.getItem('selectedMicrophone')! } : undefined
     }
 
-    // Automatically start the preparation timer after component mounts
+    // Automatically start the preparation timer after component mounts and webcam is ready
     useEffect(() => {
-        if (status === 'idle') {
-            startPrepTimer()
+        if (status === 'idle' && videoConstraints) {
+            // Add a small delay to ensure webcam has time to initialize
+            const timer = setTimeout(() => {
+                startPrepTimer()
+            }, 500)
+            return () => clearTimeout(timer)
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [])
+    }, [videoConstraints, status])
 
     // Start preparation timer
     const startPrepTimer = () => {
@@ -118,6 +143,9 @@ export default function VideoRecorder({
 
     // Initialize recording after countdown
     const initializeRecording = useCallback(() => {
+        if (audioStreamRef.current) {
+            audioStreamRef.current = null
+        }
         setStatus('recording')
         setRecordTimeRemaining(maxResponseTime)
         setRecordProgress(0)
@@ -207,10 +235,7 @@ export default function VideoRecorder({
             audioDataRef.current = new Uint8Array(analyser.frequencyBinCount)
 
             const updateAudioLevel = () => {
-                if (!audioAnalyserRef.current || !audioDataRef.current || status !== 'recording') {
-                    if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current)
-                    return
-                }
+                if (!audioAnalyserRef.current || !audioDataRef.current) return
 
                 audioAnalyserRef.current.getByteFrequencyData(audioDataRef.current)
                 let sum = 0
@@ -219,7 +244,7 @@ export default function VideoRecorder({
                 }
                 const average = sum / audioDataRef.current.length
                 const normalizedLevel = Math.min(100, Math.max(0, average * 2))
-                setAudioLevel(normalizedLevel)
+                // setAudioLevel(normalizedLevel) // Removed for now as audio level indicator is disabled
 
                 animationFrameRef.current = requestAnimationFrame(updateAudioLevel)
             }
@@ -247,7 +272,6 @@ export default function VideoRecorder({
 
         // Clean up audio monitoring
         if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current)
-        setAudioLevel(0)
     }
 
     // Function to retry recording
@@ -278,6 +302,10 @@ export default function VideoRecorder({
             }
             mediaRecorderRef.current = null
 
+            if (webcamRef.current && webcamRef.current.stream) {
+                webcamRef.current.stream.getTracks().forEach(track => track.stop());
+            }
+
             // Clear any existing timers
             if (prepTimerRef.current) {
                 clearInterval(prepTimerRef.current)
@@ -303,13 +331,14 @@ export default function VideoRecorder({
                 audioAnalyserRef.current = null
             }
 
-            setAudioLevel(0)
+            // Force webcam to reinitialize by updating the key
+            setWebcamKey(prev => prev + 1)
 
             // Force a small delay before starting countdown
             // This helps ensure the webcam and audio contexts have time to reset
             setTimeout(() => {
                 startCountdown()
-            }, 300)
+            }, 500)
         } catch (error) {
             console.error('Error in retry recording:', error)
             setStatus('error')
@@ -462,26 +491,42 @@ export default function VideoRecorder({
         return (
             <>
                 <div className="relative w-full h-full bg-black">
-                    {/* Always render Webcam component to ensure stream access, but hide when showFace is false */}
-                    <Webcam
-                        audio={true}
-                        ref={webcamRef}
-                        videoConstraints={videoConstraints}
-                        muted={true}
-                        className={showFace ? "w-full h-full object-cover" : "w-full h-full object-cover opacity-0 absolute"}
-                        data-testid="webcam-video"
-                        onUserMediaError={(error) => {
-                            logError(error, {
-                                context: 'VideoRecorder.webcam',
-                                interviewId
-                            })
-                            setStatus('error')
-                            toast.error('Failed to access camera or microphone')
-                        }}
-                    />
+                    {/* Only render Webcam component when videoConstraints is properly set */}
+                    {videoConstraints && (
+                        <Webcam
+                            key={webcamKey}
+                            audio={true}
+                            audioConstraints={audioConstraints}
+                            ref={webcamRef}
+                            videoConstraints={videoConstraints}
+                            muted={true}
+                            className={showFace ? "w-full h-full object-cover" : "w-full h-full object-cover opacity-0 absolute"}
+                            data-testid="webcam-video"
+                            onUserMediaError={(error) => {
+                                logError(error, {
+                                    context: 'VideoRecorder.webcam',
+                                    interviewId
+                                })
+                                setStatus('error')
+                                toast.error('Failed to access camera or microphone')
+                            }}
+                        />
+                    )}
+
+                    {/* Show loading state when videoConstraints is not yet set */}
+                    {!videoConstraints && (
+                        <div className="absolute inset-0 flex items-center justify-center">
+                            <div className="text-center p-4 bg-background/80 rounded-lg">
+                                <Loader2 className="h-16 w-16 mx-auto text-muted-foreground animate-spin" />
+                                <p className="mt-2 text-muted-foreground">
+                                    Initializing camera...
+                                </p>
+                            </div>
+                        </div>
+                    )}
 
                     {/* Show placeholder overlay when camera preview is hidden */}
-                    {!showFace && (
+                    {!showFace && videoConstraints && (
                         <div className="absolute inset-0 flex items-center justify-center">
                             <div className="text-center p-4 bg-background/80 rounded-lg">
                                 <Camera className="h-16 w-16 mx-auto text-muted-foreground" />
@@ -513,24 +558,24 @@ export default function VideoRecorder({
     }
 
     // Render audio level indicator
-    const renderAudioIndicator = () => {
-        if (status !== 'recording') return null
+    // const renderAudioIndicator = () => {
+    //     if (status !== 'recording') return null
 
-        return (
-            <div className="mt-4">
-                <div className="flex items-center gap-2 mb-1">
-                    <Mic className="h-4 w-4 text-muted-foreground" />
-                    <span className="text-sm text-muted-foreground">Microphone Level</span>
-                </div>
-                <div className="h-2 bg-muted rounded-full overflow-hidden" data-testid="audio-level-indicator">
-                    <div
-                        className="h-full bg-green-500 transition-all duration-100"
-                        style={{ width: `${audioLevel}%` }}
-                    ></div>
-                </div>
-            </div>
-        )
-    }
+    //     return (
+    //         <div className="mt-4">
+    //             <div className="flex items-center gap-2 mb-1">
+    //                 <Mic className="h-4 w-4 text-muted-foreground" />
+    //                 <span className="text-sm text-muted-foreground">Microphone Level</span>
+    //             </div>
+    //             <div className="h-2 bg-muted rounded-full overflow-hidden">
+    //                 <div
+    //                     className="h-full bg-green-500 transition-all duration-100"
+    //                     style={{ width: `${audioLevel}%` }}
+    //                 ></div>
+    //             </div>
+    //         </div>
+    //     )
+    // }
 
     // Render control buttons
     const renderControls = () => {
@@ -602,8 +647,6 @@ export default function VideoRecorder({
             <div className="flex-1 flex flex-col items-center justify-center bg-muted rounded-lg overflow-hidden relative mb-4">
                 {renderVideoArea()}
             </div>
-
-            {renderAudioIndicator()}
 
             <div className="mt-6 flex gap-4 justify-center">
                 {renderControls()}

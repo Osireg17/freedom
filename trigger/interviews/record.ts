@@ -72,13 +72,16 @@ export const recordInterviewTask = schemaTask({
       logger.info('Transcription completed', {
         responseId: payload.responseId,
         transcriptLength: transcript.length,
+        transcriptSnippet: transcript.substring(0, 100), // Log first 100 characters
       });
 
       // 3. Update database with transcription
       await db.update(interviewAnswers)
         .set({
           transcription: transcript,
-          updatedAt: new Date()
+          updatedAt: new Date(),
+          answerText: transcript,
+          audioUrl: payload.audioPath, // Store the path to the audio file
         })
         .where(eq(interviewAnswers.id, payload.responseId));
 
