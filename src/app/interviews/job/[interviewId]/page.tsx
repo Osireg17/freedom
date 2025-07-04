@@ -1,14 +1,14 @@
 // src/app/interviews/job/[id]/page.tsx
 import React from 'react';
 import { db } from '@/lib/db';
-import { interviews, interviewQuestions } from '@/lib/db/schema';
+import { interviews, interviewQuestions, interviewAnswers } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { notFound } from 'next/navigation';
 import { protectRoute } from '@/lib/actions/auth-actions';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
-import { ChevronLeft } from 'lucide-react';
+import { ChevronLeft, Check, Lock } from 'lucide-react';
 
 
 export async function generateMetadata() {
@@ -49,6 +49,34 @@ export default async function InterviewPage({ params }: { params: Promise<{ inte
         return notFound();
     }
 
+    // Get all responses for this interview to determine which questions have been answered
+    const responses = await db.query.interviewAnswers.findMany({
+        where: eq(interviewAnswers.interviewId, interviewId),
+        orderBy: (interviewAnswers, { asc }) => [asc(interviewAnswers.createdAt)],
+    });
+
+    // Create a map of questionId -> response for easy lookup
+    const responseMap = new Map(responses.map(response => [response.interviewQuestionId, response]));
+
+    // Determine which questions have been answered
+    const questionsWithStatus = questions.map((question, index) => {
+        const hasResponse = responseMap.has(question.id);
+        const isAccessible = index === 0 || responseMap.has(questions[index - 1].id);
+
+        return {
+            ...question,
+            hasResponse,
+            isAccessible,
+            response: responseMap.get(question.id) || null
+        };
+    });
+
+    // Find the first unanswered question
+    const firstUnansweredQuestion = questionsWithStatus.find(q => !q.hasResponse && q.isAccessible);
+
+    // If all questions are answered, allow access to all
+    const allQuestionsAnswered = questionsWithStatus.every(q => q.hasResponse);
+
     return (
         <div className="container py-8 max-w-4xl mx-auto" data-testid="interview-page">
             <Button
@@ -69,37 +97,109 @@ export default async function InterviewPage({ params }: { params: Promise<{ inte
                 <p className="text-muted-foreground">
                     {interview.companyName} • {questions.length} questions
                 </p>
+                <div className="mt-4">
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <span>Progress: {responses.length} / {questions.length} questions completed</span>
+                    </div>
+                    <div className="w-full bg-muted rounded-full h-2 mt-2">
+                        <div
+                            className="bg-primary h-2 rounded-full transition-all duration-300"
+                            style={{ width: `${(responses.length / questions.length) * 100}%` }}
+                        />
+                    </div>
+                </div>
             </div>
 
+            {firstUnansweredQuestion && !allQuestionsAnswered && (
+                <Card className="p-4 mb-6 bg-blue-50 border-blue-200 dark:bg-blue-950 dark:border-blue-800">
+                    <div className="flex items-center gap-2 text-blue-800 dark:text-blue-200">
+                        <div className="h-2 w-2 rounded-full bg-blue-500 animate-pulse" />
+                        <span className="text-sm font-medium">
+                            Continue with Question {firstUnansweredQuestion.questionNumber}
+                        </span>
+                    </div>
+                </Card>
+            )}
+
+            {allQuestionsAnswered && (
+                <Card className="p-4 mb-6 bg-green-50 border-green-200 dark:bg-green-950 dark:border-green-800">
+                    <div className="flex items-center gap-2 text-green-800 dark:text-green-200">
+                        <Check className="h-4 w-4" />
+                        <span className="text-sm font-medium">
+                            All questions completed! You can review or redo any question.
+                        </span>
+                    </div>
+                </Card>
+            )}
+
             <div className="space-y-6">
-                {questions.map((question, index) => (
-                    <Card
-                        key={question.id}
-                        className="p-6"
-                        data-testid={`interview-question-${index + 1}`}
-                    >
-                        <div className="flex justify-between items-start mb-4">
-                            <div className="bg-primary/10 px-3 py-1 rounded-full">
-                                <span className="text-sm font-medium text-primary">Question {index + 1}</span>
-                            </div>
-                            <div className="text-sm text-muted-foreground">
-                                {question.questionType.charAt(0).toUpperCase() + question.questionType.slice(1)}
-                            </div>
-                        </div>
+                {questionsWithStatus.map((question, index) => {
+                    const isLocked = !question.isAccessible && !allQuestionsAnswered;
+                    const isCompleted = question.hasResponse;
 
-                        <p className="text-lg mb-6">{question.questionText}</p>
-
-                        <Button
-                            className="w-full"
-                            asChild
-                            data-testid={`start-question-${index + 1}-button`}
+                    return (
+                        <Card
+                            key={question.id}
+                            className={`p-6 transition-all duration-200 ${isLocked
+                                ? 'opacity-60 bg-muted/50'
+                                : isCompleted
+                                    ? 'border-green-200 bg-green-50/30 dark:border-green-800 dark:bg-green-950/30'
+                                    : question.isAccessible
+                                        ? 'border-blue-200 bg-blue-50/30 dark:border-blue-800 dark:bg-blue-950/30'
+                                        : ''
+                                }`}
+                            data-testid={`interview-question-${index + 1}`}
                         >
-                            <Link href={`/interviews/job/${interview.id}/questions/${question.id}`}>
-                                Start Answering
-                            </Link>
-                        </Button>
-                    </Card>
-                ))}
+                            <div className="flex justify-between items-start mb-4">
+                                <div className="flex items-center gap-2">
+                                    <div className={`px-3 py-1 rounded-full ${isCompleted
+                                        ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
+                                        : question.isAccessible
+                                            ? 'bg-primary/10 text-primary'
+                                            : 'bg-muted text-muted-foreground'
+                                        }`}>
+                                        <span className="text-sm font-medium flex items-center gap-1">
+                                            {isCompleted && <Check className="h-3 w-3" />}
+                                            {isLocked && <Lock className="h-3 w-3" />}
+                                            Question {index + 1}
+                                        </span>
+                                    </div>
+                                    {isCompleted && (
+                                        <span className="text-xs text-green-600 dark:text-green-400 font-medium">
+                                            Completed
+                                        </span>
+                                    )}
+                                </div>
+                                <div className="text-sm text-muted-foreground">
+                                    {question.questionType.charAt(0).toUpperCase() + question.questionType.slice(1)}
+                                </div>
+                            </div>
+
+                            <p className={`text-lg mb-6 ${isLocked ? 'text-muted-foreground' : ''}`}>
+                                {question.questionText}
+                            </p>
+
+                            <Button
+                                className="w-full"
+                                disabled={isLocked}
+                                variant={isCompleted ? "outline" : "default"}
+                                asChild={!isLocked}
+                                data-testid={`start-question-${index + 1}-button`}
+                            >
+                                {isLocked ? (
+                                    <div className="flex items-center gap-2">
+                                        <Lock className="h-4 w-4" />
+                                        Complete Previous Questions
+                                    </div>
+                                ) : (
+                                    <Link href={`/interviews/job/${interview.id}/questions/${question.id}`}>
+                                        {isCompleted ? `Review Question ${index + 1}` : `Start Question ${index + 1}`}
+                                    </Link>
+                                )}
+                            </Button>
+                        </Card>
+                    );
+                })}
             </div>
         </div>
     );
