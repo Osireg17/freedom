@@ -1,8 +1,10 @@
 import React from 'react';
-import { render, screen, fireEvent, act } from '@testing-library/react';
+import { render, screen, fireEvent, act, waitFor } from '@testing-library/react';
 import { useRouter } from 'next/navigation';
+import { toast } from 'sonner';
 import VideoRecorder from '../video-recorder';
 import { useErrorLogging } from '@/hooks/use-error-logging';
+import * as deviceSession from '@/lib/device-session';
 
 // Mock dependencies
 jest.mock('next/navigation', () => ({
@@ -20,20 +22,8 @@ jest.mock('@/hooks/use-error-logging', () => ({
     useErrorLogging: jest.fn(),
 }));
 
-jest.mock('react-webcam', () => {
-    const MockWebcam = React.forwardRef<unknown, Record<string, unknown>>((props, ref) => {
-        React.useImperativeHandle(ref, () => ({
-            stream: {
-                getTracks: () => [{ stop: jest.fn() }],
-            },
-        }));
-        return <div data-testid="webcam-video" {...props} />;
-    });
-    MockWebcam.displayName = 'MockWebcam';
-    return MockWebcam;
-});
+jest.mock('@/lib/device-session');
 
-// Mock MediaRecorder
 const mockMediaRecorder = {
     start: jest.fn(),
     stop: jest.fn(),
@@ -42,35 +32,26 @@ const mockMediaRecorder = {
     onstop: null,
 };
 
-Object.defineProperty(window, 'MediaRecorder', {
-    writable: true,
-    value: jest.fn().mockImplementation(() => mockMediaRecorder),
-});
+// Mock MediaRecorder and AudioContext
+const MockedMediaRecorder = jest.fn().mockImplementation(() => mockMediaRecorder);
+(MockedMediaRecorder as any).isTypeSupported = jest.fn().mockReturnValue(true);
+global.MediaRecorder = MockedMediaRecorder as any;
 
-// Mock AudioContext
-const mockAudioContext = {
-    createMediaStreamSource: jest.fn().mockReturnValue({
-        connect: jest.fn(),
-    }),
+global.AudioContext = jest.fn().mockImplementation(() => ({
+    createMediaStreamSource: jest.fn().mockReturnValue({ connect: jest.fn() }),
     createAnalyser: jest.fn().mockReturnValue({
         fftSize: 256,
         frequencyBinCount: 128,
         getByteFrequencyData: jest.fn(),
     }),
     close: jest.fn().mockResolvedValue(undefined),
-};
-
-Object.defineProperty(window, 'AudioContext', {
-    writable: true,
-    value: jest.fn().mockImplementation(() => mockAudioContext),
-});
+}));
 
 // Mock URL methods
 Object.defineProperty(URL, 'createObjectURL', {
     writable: true,
-    value: jest.fn().mockReturnValue('mock-url'),
+    value: jest.fn().mockReturnValue('mock-video-url'),
 });
-
 Object.defineProperty(URL, 'revokeObjectURL', {
     writable: true,
     value: jest.fn(),
@@ -79,248 +60,361 @@ Object.defineProperty(URL, 'revokeObjectURL', {
 // Mock fetch
 global.fetch = jest.fn();
 
+// Mock webcam ref
+const mockWebcamRef = {
+    current: {
+        stream: {
+            getTracks: () => [{ stop: jest.fn() }],
+            getVideoTracks: () => [{ stop: jest.fn() }],
+            getAudioTracks: () => [{ stop: jest.fn() }]
+        }
+    }
+};
+
+// Mock Webcam component
+jest.mock('react-webcam', () => {
+    const MockWebcam = React.forwardRef<any, { onUserMedia?: () => void; onUserMediaError?: (error: Error) => void }>(
+        ({ onUserMedia, onUserMediaError }, ref) => {
+            // Set the ref to our mock
+            React.useImperativeHandle(ref, () => mockWebcamRef.current);
+
+            // Simulate webcam initialization
+            React.useEffect(() => {
+                const timer = setTimeout(() => {
+                    if (onUserMedia) {
+                        onUserMedia();
+                    }
+                }, 100);
+
+                return () => clearTimeout(timer);
+            }, [onUserMedia, onUserMediaError]);
+
+            return <div data-testid="webcam-video" />;
+        }
+    );
+    MockWebcam.displayName = 'MockWebcam';
+    return MockWebcam;
+});
+
 describe('VideoRecorder', () => {
-    const mockRouter = {
-        push: jest.fn(),
-    };
-
+    const mockRouter = { push: jest.fn() };
     const mockLogError = jest.fn();
-
     const defaultProps = {
         interviewId: 'test-interview-id',
         questionId: 'test-question-id',
         showFace: true,
-        prepTime: 30,
-        maxResponseTime: 120,
+        prepTime: 5,
+        maxResponseTime: 10,
     };
 
     beforeEach(() => {
         jest.clearAllMocks();
         jest.useFakeTimers();
-        
-        (useRouter as jest.Mock).mockReturnValue(mockRouter);
-        (useErrorLogging as jest.Mock).mockReturnValue({
-            logError: mockLogError,
-        });
 
-        // Reset MediaRecorder mock
+        (useRouter as jest.Mock).mockReturnValue(mockRouter);
+        (useErrorLogging as jest.Mock).mockReturnValue({ logError: mockLogError });
+
+        // Set up default device session mocks
+        (deviceSession.hasValidDeviceSettings as jest.Mock).mockReturnValue(true);
+        (deviceSession.getActiveMediaStream as jest.Mock).mockReturnValue(null);
+        (deviceSession.getSelectedCamera as jest.Mock).mockReturnValue('test-camera');
+        (deviceSession.getSelectedMicrophone as jest.Mock).mockReturnValue('test-mic');
+
         mockMediaRecorder.state = 'inactive';
-        mockMediaRecorder.start.mockClear();
-        mockMediaRecorder.stop.mockClear();
     });
 
     afterEach(() => {
         jest.useRealTimers();
+        jest.restoreAllMocks();
     });
 
-    describe('Component Rendering', () => {
-        it('renders the video recorder component', () => {
-            render(<VideoRecorder {...defaultProps} />);
-            
+    const renderComponent = (props = {}) => {
+        return render(<VideoRecorder {...defaultProps} {...props} />);
+    };
+
+    describe('Rendering and Initialization', () => {
+        it('renders the video recorder and starts preparation', async () => {
+            renderComponent();
+
             expect(screen.getByTestId('video-recorder')).toBeInTheDocument();
-            expect(screen.getByTestId('webcam-video')).toBeInTheDocument();
+
+            // Wait for webcam to initialize and preparation to start
+            await waitFor(() => {
+                expect(screen.getByTestId('webcam-video')).toBeInTheDocument();
+            });
+
+            await waitFor(() => {
+                expect(screen.getByText('Preparation Time')).toBeInTheDocument();
+            }, { timeout: 2000 });
+
+            expect(screen.getByTestId('time-display')).toHaveTextContent('00:05');
         });
 
-        it('shows webcam when showFace is true', () => {
-            render(<VideoRecorder {...defaultProps} showFace={true} />);
-            
-            const webcam = screen.getByTestId('webcam-video');
-            expect(webcam).toHaveClass('w-full h-full object-cover');
-            expect(webcam).not.toHaveClass('opacity-0');
+        it('shows webcam preview when showFace is true', async () => {
+            renderComponent({ showFace: true });
+
+            await waitFor(() => {
+                expect(screen.getByTestId('webcam-video')).toBeInTheDocument();
+            });
+
+            await waitFor(() => {
+                expect(screen.queryByText('Camera is active but preview is hidden')).not.toBeInTheDocument();
+            });
         });
 
-        it('hides webcam preview when showFace is false', () => {
-            render(<VideoRecorder {...defaultProps} showFace={false} />);
-            
-            const webcam = screen.getByTestId('webcam-video');
-            expect(webcam).toHaveClass('opacity-0');
-            expect(screen.getByText('Camera is active but preview is hidden')).toBeInTheDocument();
+        it('hides webcam preview when showFace is false', async () => {
+            renderComponent({ showFace: false });
+
+            await waitFor(() => {
+                expect(screen.getByTestId('webcam-video')).toBeInTheDocument();
+            });
+
+            await waitFor(() => {
+                expect(screen.getByText('Camera is active but preview is hidden')).toBeInTheDocument();
+            });
+        });
+
+        it('uses existing media stream if available', async () => {
+            const mockExistingStream = {
+                getTracks: () => [{ stop: jest.fn() }],
+                getVideoTracks: () => [{ stop: jest.fn() }],
+                getAudioTracks: () => [{ stop: jest.fn() }]
+            };
+            (deviceSession.getActiveMediaStream as jest.Mock).mockReturnValue(mockExistingStream);
+            (deviceSession.hasValidDeviceSettings as jest.Mock).mockReturnValue(true);
+
+            renderComponent();
+
+            await waitFor(() => {
+                expect(screen.getByTestId('webcam-video')).toBeInTheDocument();
+            });
         });
     });
 
-    describe('Preparation Phase', () => {
-        it('starts preparation timer automatically on mount', () => {
-            render(<VideoRecorder {...defaultProps} />);
-            
-            expect(screen.getByText('Preparation Time')).toBeInTheDocument();
-            expect(screen.getByTestId('skip-prep-button')).toBeInTheDocument();
-        });
+    describe('User Flow: Happy Path', () => {
+        it('completes the full recording and submission process', async () => {
+            renderComponent();
 
-        it('displays countdown during preparation', () => {
-            render(<VideoRecorder {...defaultProps} prepTime={5} />);
-            
-            expect(screen.getByText('00:05')).toBeInTheDocument();
-        });
+            // Wait for webcam to be ready
+            await waitFor(() => expect(screen.getByTestId('webcam-video')).toBeInTheDocument());
 
-        it('allows skipping preparation', () => {
-            render(<VideoRecorder {...defaultProps} />);
-            
+            // Wait for preparation phase to start automatically
+            await waitFor(() => expect(screen.getByText('Preparation Time')).toBeInTheDocument(), { timeout: 2000 });
+            act(() => { jest.advanceTimersByTime(5000); });
+
+            // Countdown phase
+            await waitFor(() => expect(screen.getByTestId('countdown-overlay')).toBeInTheDocument());
+            expect(screen.getByText('3')).toBeInTheDocument();
+            act(() => { jest.advanceTimersByTime(3000); });
+
+            // Recording phase
+            await waitFor(() => expect(screen.getByText('Recording Time')).toBeInTheDocument());
+            expect(mockMediaRecorder.start).toHaveBeenCalled();
+            act(() => { jest.advanceTimersByTime(5000); });
+
+            // Stop recording
+            fireEvent.click(screen.getByTestId('stop-recording-button'));
+            act(() => { mockMediaRecorder.onstop && mockMediaRecorder.onstop(); });
+
+            // Review phase
+            await waitFor(() => expect(screen.getByTestId('review-video')).toBeInTheDocument());
+            expect(screen.getByTestId('submit-button')).toBeInTheDocument();
+
+            // Submission
+            (fetch as jest.Mock).mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({}) });
+            fireEvent.click(screen.getByTestId('submit-button'));
+
+            await waitFor(() => expect(screen.getByText('Submitting...')).toBeInTheDocument());
+            await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Response submitted successfully!'));
+            expect(mockRouter.push).toHaveBeenCalledWith(`/interviews/job/${defaultProps.interviewId}`);
+        });
+    });
+
+    describe('Controls and Interactions', () => {
+        it('allows skipping preparation', async () => {
+            renderComponent();
+
+            // Wait for webcam to be ready and preparation to start
+            await waitFor(() => expect(screen.getByTestId('webcam-video')).toBeInTheDocument());
+            await waitFor(() => expect(screen.getByText('Preparation Time')).toBeInTheDocument(), { timeout: 2000 });
+
             fireEvent.click(screen.getByTestId('skip-prep-button'));
-            
-            act(() => {
-                jest.advanceTimersByTime(1000);
+
+            await waitFor(() => expect(screen.getByTestId('countdown-overlay')).toBeInTheDocument());
+        });
+
+        it('allows re-recording a response', async () => {
+            renderComponent();
+
+            // Wait for webcam and preparation
+            await waitFor(() => expect(screen.getByTestId('webcam-video')).toBeInTheDocument());
+            await waitFor(() => expect(screen.getByText('Preparation Time')).toBeInTheDocument(), { timeout: 2000 });
+
+            // Go through recording and get to review
+            act(() => { jest.advanceTimersByTime(8000); }); // Prep + Countdown
+            await waitFor(() => expect(screen.getByText('Recording Time')).toBeInTheDocument());
+            fireEvent.click(screen.getByTestId('stop-recording-button'));
+            act(() => { mockMediaRecorder.onstop && mockMediaRecorder.onstop(); });
+
+            // Review and retry
+            await waitFor(() => expect(screen.getByTestId('retry-button')).toBeInTheDocument());
+            fireEvent.click(screen.getByTestId('retry-button'));
+
+            // Should go back to countdown
+            await waitFor(() => expect(screen.getByTestId('countdown-overlay')).toBeInTheDocument());
+            expect(toast.error).not.toHaveBeenCalled();
+        });
+
+        it('disables retry after max attempts', async () => {
+            renderComponent();
+
+            // Wait for initial setup
+            await waitFor(() => expect(screen.getByTestId('webcam-video')).toBeInTheDocument());
+            await waitFor(() => expect(screen.getByText('Preparation Time')).toBeInTheDocument(), { timeout: 2000 });
+
+            // Simulate 3 retries
+            for (let i = 0; i < 3; i++) {
+                act(() => { jest.advanceTimersByTime(8000); });
+                await waitFor(() => expect(screen.getByText('Recording Time')).toBeInTheDocument());
+                fireEvent.click(screen.getByTestId('stop-recording-button'));
+                act(() => { mockMediaRecorder.onstop(); });
+                await waitFor(() => expect(screen.getByTestId('retry-button')).toBeInTheDocument());
+                fireEvent.click(screen.getByTestId('retry-button'));
+
+                // Wait for webcam to reinitialize after retry
+                await waitFor(() => expect(screen.getByTestId('countdown-overlay')).toBeInTheDocument());
+            }
+
+            // Final recording
+            act(() => { jest.advanceTimersByTime(3000); }); // Countdown
+            await waitFor(() => expect(screen.getByText('Recording Time')).toBeInTheDocument());
+            fireEvent.click(screen.getByTestId('stop-recording-button'));
+            act(() => { mockMediaRecorder.onstop && mockMediaRecorder.onstop(); });
+
+            // Check if retry is disabled
+            await waitFor(() => {
+                const retryButton = screen.getByTestId('retry-button');
+                expect(retryButton).toBeDisabled();
+                expect(retryButton).toHaveTextContent('Max retries reached');
             });
-            
-            expect(screen.getByTestId('countdown-display')).toBeInTheDocument();
-        });
-
-        it('automatically starts countdown after prep time ends', () => {
-            render(<VideoRecorder {...defaultProps} prepTime={2} />);
-            
-            act(() => {
-                jest.advanceTimersByTime(2000);
-            });
-            
-            expect(screen.getByTestId('countdown-display')).toBeInTheDocument();
-        });
-    });
-
-    describe('Countdown Phase', () => {
-        it('shows countdown overlay during countdown', () => {
-            render(<VideoRecorder {...defaultProps} prepTime={1} />);
-            
-            act(() => {
-                jest.advanceTimersByTime(1000);
-            });
-            
-            expect(screen.getByTestId('countdown-overlay')).toBeInTheDocument();
-            expect(screen.getByTestId('countdown-display')).toBeInTheDocument();
-        });
-
-        it('shows countdown display during countdown', () => {
-            render(<VideoRecorder {...defaultProps} prepTime={1} />);
-
-            act(() => {
-                jest.advanceTimersByTime(1000);
-            });
-
-            expect(screen.getByTestId('countdown-overlay')).toBeInTheDocument();
-        });
-    });
-
-    describe('Redo Functionality', () => {
-        it('tracks redo attempts state', () => {
-            const { rerender } = render(<VideoRecorder {...defaultProps} />);
-            
-            // Component should initialize with 0 redo attempts
-            // This tests the state management rather than complex interactions
-            expect(screen.getByTestId('video-recorder')).toBeInTheDocument();
-            
-            // Re-render with same props to ensure state consistency
-            rerender(<VideoRecorder {...defaultProps} />);
-            expect(screen.getByTestId('video-recorder')).toBeInTheDocument();
-        });
-
-        it('has correct button text for retry functionality', () => {
-            render(<VideoRecorder {...defaultProps} />);
-            
-            // The retry button should exist in the component structure
-            // even if not immediately visible due to state
-            expect(screen.getByTestId('video-recorder')).toBeInTheDocument();
-        });
-    });
-
-    describe('Time Formatting', () => {
-        it('formats time correctly', () => {
-            render(<VideoRecorder {...defaultProps} prepTime={65} />);
-            
-            expect(screen.getByText('01:05')).toBeInTheDocument();
-        });
-
-        it('formats seconds correctly', () => {
-            render(<VideoRecorder {...defaultProps} prepTime={30} />);
-            
-            expect(screen.getByText('00:30')).toBeInTheDocument();
-        });
-    });
-
-    describe('Component Cleanup', () => {
-        it('cleans up timers on unmount', () => {
-            const { unmount } = render(<VideoRecorder {...defaultProps} />);
-            
-            unmount();
-            
-            // Advance timers to ensure no memory leaks
-            act(() => {
-                jest.advanceTimersByTime(10000);
-            });
-            
-            // No assertions needed - test passes if no errors are thrown
-        });
-
-        it('handles unmount gracefully', () => {
-            const { unmount } = render(<VideoRecorder {...defaultProps} />);
-            
-            // Start some timers
-            act(() => {
-                jest.advanceTimersByTime(1000);
-            });
-            
-            unmount();
-            
-            // Should not throw errors
-            expect(true).toBe(true);
-        });
-    });
-
-    describe('Props Handling', () => {
-        it('handles different prep times', () => {
-            render(<VideoRecorder {...defaultProps} prepTime={10} />);
-            
-            expect(screen.getByText('00:10')).toBeInTheDocument();
-        });
-
-        it('handles different interview IDs', () => {
-            render(<VideoRecorder {...defaultProps} interviewId="different-id" />);
-            
-            expect(screen.getByTestId('video-recorder')).toBeInTheDocument();
-        });
-
-        it('handles different question IDs', () => {
-            render(<VideoRecorder {...defaultProps} questionId="different-question" />);
-            
-            expect(screen.getByTestId('video-recorder')).toBeInTheDocument();
-        });
-
-        it('handles different max response times', () => {
-            render(<VideoRecorder {...defaultProps} maxResponseTime={180} />);
-            
-            expect(screen.getByTestId('video-recorder')).toBeInTheDocument();
         });
     });
 
     describe('Error Handling', () => {
-        it('renders error state correctly', () => {
-            render(<VideoRecorder {...defaultProps} />);
-            
-            // Component should handle errors gracefully
-            expect(screen.getByTestId('video-recorder')).toBeInTheDocument();
+        it('handles webcam media error', async () => {
+            // Override the Webcam mock for this test
+            jest.doMock('react-webcam', () => {
+                const ErrorWebcam = React.forwardRef<any, { onUserMediaError?: (error: Error) => void }>(
+                    ({ onUserMediaError }) => {
+                        React.useEffect(() => {
+                            if (onUserMediaError) {
+                                onUserMediaError(new Error('Test media error'));
+                            }
+                        }, [onUserMediaError]);
+                        return <div data-testid="webcam-video" />;
+                    }
+                );
+                ErrorWebcam.displayName = 'ErrorWebcam';
+                return ErrorWebcam;
+            });
+
+            renderComponent();
+
+            await waitFor(() => {
+                expect(screen.getByText('Recording Error')).toBeInTheDocument();
+                expect(toast.error).toHaveBeenCalledWith('Failed to access camera or microphone');
+                expect(mockLogError).toHaveBeenCalled();
+            });
         });
 
-        it('handles webcam errors', () => {
-            render(<VideoRecorder {...defaultProps} />);
-            
-            const webcam = screen.getByTestId('webcam-video');
-            fireEvent(webcam, new Event('error'));
-            
-            // Component should still be rendered
-            expect(screen.getByTestId('video-recorder')).toBeInTheDocument();
+        it('handles recording initialization failure', async () => {
+            (MockedMediaRecorder as any).mockImplementationOnce(() => {
+                throw new Error('Failed to create MediaRecorder');
+            });
+
+            renderComponent();
+
+            // Wait for webcam and preparation
+            await waitFor(() => expect(screen.getByTestId('webcam-video')).toBeInTheDocument());
+            await waitFor(() => expect(screen.getByText('Preparation Time')).toBeInTheDocument(), { timeout: 2000 });
+
+            act(() => { jest.advanceTimersByTime(8000); }); // Prep + Countdown
+
+            await waitFor(() => {
+                expect(screen.getByText('Recording Error')).toBeInTheDocument();
+                expect(toast.error).toHaveBeenCalledWith('Failed to start recording. Please check your camera permissions.');
+                expect(mockLogError).toHaveBeenCalled();
+            });
+        });
+
+        it('handles submission failure', async () => {
+            (fetch as jest.Mock).mockResolvedValueOnce({
+                ok: false,
+                status: 500,
+                json: () => Promise.resolve({ error: { message: 'Server error' } })
+            });
+
+            renderComponent();
+
+            // Wait for webcam and preparation
+            await waitFor(() => expect(screen.getByTestId('webcam-video')).toBeInTheDocument());
+            await waitFor(() => expect(screen.getByText('Preparation Time')).toBeInTheDocument(), { timeout: 2000 });
+
+            act(() => { jest.advanceTimersByTime(8000); });
+            await waitFor(() => expect(screen.getByText('Recording Time')).toBeInTheDocument());
+            fireEvent.click(screen.getByTestId('stop-recording-button'));
+            act(() => { mockMediaRecorder.onstop && mockMediaRecorder.onstop(); });
+            await waitFor(() => expect(screen.getByTestId('submit-button')).toBeInTheDocument());
+
+            fireEvent.click(screen.getByTestId('submit-button'));
+
+            await waitFor(() => {
+                expect(toast.error).toHaveBeenCalledWith('Failed to submit your response. Please try again.');
+                expect(screen.getByTestId('submit-button')).not.toBeDisabled(); // Re-enabled after error
+            });
         });
     });
 
-    describe('State Management', () => {
-        it('initializes with correct default state', () => {
-            render(<VideoRecorder {...defaultProps} />);
-            
-            expect(screen.getByText('Preparation Time')).toBeInTheDocument();
+    describe('Device Session Integration', () => {
+        it('uses device session settings when available', async () => {
+            (deviceSession.hasValidDeviceSettings as jest.Mock).mockReturnValue(true);
+            (deviceSession.getSelectedCamera as jest.Mock).mockReturnValue('custom-camera-id');
+            (deviceSession.getSelectedMicrophone as jest.Mock).mockReturnValue('custom-mic-id');
+
+            renderComponent();
+
+            await waitFor(() => {
+                expect(screen.getByTestId('webcam-video')).toBeInTheDocument();
+            });
+
+            expect(deviceSession.getSelectedCamera).toHaveBeenCalled();
+            expect(deviceSession.getSelectedMicrophone).toHaveBeenCalled();
         });
 
-        it('maintains state consistency across re-renders', () => {
-            const { rerender } = render(<VideoRecorder {...defaultProps} />);
-            
-            rerender(<VideoRecorder {...defaultProps} prepTime={15} />);
-            
-            expect(screen.getByTestId('video-recorder')).toBeInTheDocument();
+        it('handles missing device settings gracefully', async () => {
+            (deviceSession.hasValidDeviceSettings as jest.Mock).mockReturnValue(false);
+            (deviceSession.getSelectedCamera as jest.Mock).mockReturnValue(null);
+            (deviceSession.getSelectedMicrophone as jest.Mock).mockReturnValue(null);
+
+            renderComponent();
+
+            await waitFor(() => {
+                expect(screen.getByTestId('webcam-video')).toBeInTheDocument();
+            });
+        });
+    });
+
+    describe('Cleanup', () => {
+        it('cleans up timers and object URLs on unmount', () => {
+            const { unmount } = renderComponent();
+            const clearIntervalSpy = jest.spyOn(global, 'clearInterval');
+            const cancelAnimationFrameSpy = jest.spyOn(global, 'cancelAnimationFrame');
+
+            unmount();
+
+            expect(clearIntervalSpy).toHaveBeenCalled();
+            expect(cancelAnimationFrameSpy).toHaveBeenCalled();
+            expect(URL.revokeObjectURL).toHaveBeenCalledWith('mock-video-url');
         });
     });
 });
