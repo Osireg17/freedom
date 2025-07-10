@@ -7,6 +7,9 @@ interface DeviceSettings {
   timestamp: number
 }
 
+// Global stream storage for session persistence
+let activeMediaStream: MediaStream | null = null
+
 const DEVICE_SESSION_KEY = 'interview_device_session'
 const SESSION_DURATION = 24 * 60 * 60 * 1000 // 24 hours in milliseconds
 
@@ -40,6 +43,13 @@ export function storeDeviceSettings(camera: string, microphone: string): void {
     timestamp: Date.now()
   }
   
+  console.log('[DeviceSession] Storing device settings:', {
+    cameraId: camera.substring(0, 8) + '...',
+    microphoneId: microphone.substring(0, 8) + '...',
+    sessionId: settings.sessionId.substring(0, 16) + '...',
+    timestamp: new Date(settings.timestamp).toISOString()
+  })
+  
   localStorage.setItem(DEVICE_SESSION_KEY, JSON.stringify(settings))
   
   // Also store individual items for backward compatibility
@@ -53,7 +63,10 @@ export function storeDeviceSettings(camera: string, microphone: string): void {
 export function getValidDeviceSettings(): { camera: string; microphone: string } | null {
   try {
     const stored = localStorage.getItem(DEVICE_SESSION_KEY)
-    if (!stored) return null
+    if (!stored) {
+      console.log('[DeviceSession] No stored device settings found')
+      return null
+    }
 
     const settings: DeviceSettings = JSON.parse(stored)
     const currentSessionId = getCurrentSessionId()
@@ -62,8 +75,18 @@ export function getValidDeviceSettings(): { camera: string; microphone: string }
     // Check if session is still valid
     const sessionValid = settings.sessionId === currentSessionId
     const timeValid = (now - settings.timestamp) < SESSION_DURATION
+    const ageMinutes = Math.round((now - settings.timestamp) / (1000 * 60))
+
+    console.log('[DeviceSession] Validating device settings:', {
+      sessionValid,
+      timeValid,
+      ageMinutes,
+      hasCamera: !!settings.selectedCamera,
+      hasMicrophone: !!settings.selectedMicrophone
+    })
 
     if (sessionValid && timeValid && settings.selectedCamera && settings.selectedMicrophone) {
+      console.log('[DeviceSession] Using valid existing device settings')
       return {
         camera: settings.selectedCamera,
         microphone: settings.selectedMicrophone
@@ -71,10 +94,11 @@ export function getValidDeviceSettings(): { camera: string; microphone: string }
     }
 
     // If invalid, clean up old settings
+    console.log('[DeviceSession] Device settings invalid, cleaning up')
     clearDeviceSettings()
     return null
   } catch (error) {
-    console.error('Error reading device settings:', error)
+    console.error('[DeviceSession] Error reading device settings:', error)
     clearDeviceSettings()
     return null
   }
@@ -94,6 +118,7 @@ export function clearDeviceSettings(): void {
   localStorage.removeItem(DEVICE_SESSION_KEY)
   localStorage.removeItem('selectedCamera')
   localStorage.removeItem('selectedMicrophone')
+  clearActiveMediaStream()
 }
 
 /**
@@ -147,4 +172,61 @@ export function initializeSessionCleanup(): (() => void) | void {
  */
 export function isFreshSession(): boolean {
   return !sessionStorage.getItem('browser_session_id')
+}
+
+/**
+ * Store active media stream for session persistence
+ */
+export function setActiveMediaStream(stream: MediaStream | null): void {
+  // Clean up existing stream if replacing
+  if (activeMediaStream && activeMediaStream !== stream) {
+    console.log('[DeviceSession] Replacing existing media stream')
+    activeMediaStream.getTracks().forEach(track => track.stop())
+  }
+  
+  if (stream) {
+    console.log('[DeviceSession] Setting active media stream:', {
+      streamId: stream.id,
+      videoTracks: stream.getVideoTracks().length,
+      audioTracks: stream.getAudioTracks().length,
+      active: stream.active
+    })
+  } else {
+    console.log('[DeviceSession] Clearing active media stream')
+  }
+  
+  activeMediaStream = stream
+}
+
+/**
+ * Get active media stream if it exists and is valid
+ */
+export function getActiveMediaStream(): MediaStream | null {
+  // Check if stream is still active (not ended)
+  if (activeMediaStream && activeMediaStream.active) {
+    console.log('[DeviceSession] Returning active media stream:', {
+      streamId: activeMediaStream.id,
+      active: activeMediaStream.active
+    })
+    return activeMediaStream
+  }
+  
+  // Clean up inactive stream
+  if (activeMediaStream) {
+    console.log('[DeviceSession] Cleaning up inactive media stream')
+    activeMediaStream = null
+  }
+  
+  console.log('[DeviceSession] No active media stream available')
+  return null
+}
+
+/**
+ * Clear active media stream
+ */
+export function clearActiveMediaStream(): void {
+  if (activeMediaStream) {
+    activeMediaStream.getTracks().forEach(track => track.stop())
+    activeMediaStream = null
+  }
 }
