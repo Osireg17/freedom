@@ -8,6 +8,7 @@ import { Progress } from '@/components/ui/progress'
 import { useErrorLogging } from '@/hooks/use-error-logging'
 import { toast } from 'sonner'
 import { Camera, Loader2, VideoOff } from 'lucide-react'
+import { getSelectedCamera, getSelectedMicrophone } from '@/lib/device-session'
 
 interface VideoRecorderProps {
     interviewId: string
@@ -46,6 +47,7 @@ export default function VideoRecorder({
     const [redoAttempts, setRedoAttempts] = useState(0)
     const [videoConstraints, setVideoConstraints] = useState<MediaTrackConstraints | null>(null)
     const [webcamKey, setWebcamKey] = useState(0)
+    const [webcamReady, setWebcamReady] = useState(false)
 
     const webcamRef = useRef<Webcam>(null)
     const mediaRecorderRef = useRef<MediaRecorder | null>(null)
@@ -60,8 +62,9 @@ export default function VideoRecorder({
     const animationFrameRef = useRef<number | null>(null)
 
     useEffect(() => {
-        const selectedCamera = localStorage.getItem('selectedCamera')
-        const selectedMicrophone = localStorage.getItem('selectedMicrophone')
+        // Use session-based device settings
+        const selectedCamera = getSelectedCamera()
+        const selectedMicrophone = getSelectedMicrophone()
 
         const constraints: MediaTrackConstraints = {
             width: 1280,
@@ -75,6 +78,7 @@ export default function VideoRecorder({
 
         setVideoConstraints(constraints)
         setWebcamKey(prev => prev + 1)
+        setWebcamReady(false)
 
         if (selectedMicrophone) {
             console.log('Selected microphone ID:', selectedMicrophone)
@@ -83,20 +87,20 @@ export default function VideoRecorder({
 
     // Set up webcam constraints
     const audioConstraints = {
-        deviceId: localStorage.getItem('selectedMicrophone') ? { exact: localStorage.getItem('selectedMicrophone')! } : undefined
+        deviceId: getSelectedMicrophone() ? { exact: getSelectedMicrophone()! } : undefined
     }
 
     // Automatically start the preparation timer after component mounts and webcam is ready
     useEffect(() => {
-        if (status === 'idle' && videoConstraints) {
+        if (status === 'idle' && videoConstraints && webcamReady) {
             // Add a small delay to ensure webcam has time to initialize
             const timer = setTimeout(() => {
                 startPrepTimer()
-            }, 500)
+            }, 1000)
             return () => clearTimeout(timer)
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [videoConstraints, status])
+    }, [videoConstraints, status, webcamReady])
 
     // Start preparation timer
     const startPrepTimer = () => {
@@ -333,6 +337,7 @@ export default function VideoRecorder({
 
             // Force webcam to reinitialize by updating the key
             setWebcamKey(prev => prev + 1)
+            setWebcamReady(false)
 
             // Force a small delay before starting countdown
             // This helps ensure the webcam and audio contexts have time to reset
@@ -502,24 +507,29 @@ export default function VideoRecorder({
                             muted={true}
                             className={showFace ? "w-full h-full object-cover" : "w-full h-full object-cover opacity-0 absolute"}
                             data-testid="webcam-video"
+                            onUserMedia={() => {
+                                console.log('Webcam ready - user media obtained')
+                                setWebcamReady(true)
+                            }}
                             onUserMediaError={(error) => {
                                 logError(error, {
                                     context: 'VideoRecorder.webcam',
                                     interviewId
                                 })
                                 setStatus('error')
+                                setWebcamReady(false)
                                 toast.error('Failed to access camera or microphone')
                             }}
                         />
                     )}
 
-                    {/* Show loading state when videoConstraints is not yet set */}
-                    {!videoConstraints && (
+                    {/* Show loading state when videoConstraints is not yet set or webcam not ready */}
+                    {(!videoConstraints || !webcamReady) && (
                         <div className="absolute inset-0 flex items-center justify-center">
                             <div className="text-center p-4 bg-background/80 rounded-lg">
                                 <Loader2 className="h-16 w-16 mx-auto text-muted-foreground animate-spin" />
                                 <p className="mt-2 text-muted-foreground">
-                                    Initializing camera...
+                                    {!videoConstraints ? 'Initializing camera...' : 'Connecting to camera...'}
                                 </p>
                             </div>
                         </div>
