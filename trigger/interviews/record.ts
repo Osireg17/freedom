@@ -18,7 +18,7 @@ const RecordInterviewPayloadSchema = z.object({
   interviewId: z.string(),
   questionId: z.string(),
   userId: z.string(),
-  audioPath: z.string(), // Path in Supabase storage
+  audioPath: z.string(),
 });
 
 export const recordInterviewTask = schemaTask({
@@ -80,8 +80,7 @@ export const recordInterviewTask = schemaTask({
         .set({
           transcription: transcript,
           updatedAt: new Date(),
-          answerText: transcript,
-          audioUrl: payload.audioPath, // Store the path to the audio file
+          audioUrl: payload.audioPath
         })
         .where(eq(interviewAnswers.id, payload.responseId));
 

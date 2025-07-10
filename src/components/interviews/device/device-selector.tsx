@@ -9,6 +9,7 @@ import { Label } from '@/components/ui/label'
 import { toast } from 'sonner'
 import { useErrorLogging } from '@/hooks/use-error-logging'
 import { Mic } from 'lucide-react'
+import { storeDeviceSettings } from '@/lib/device-session'
 
 interface DeviceSelectorProps {
     interviewId: string
@@ -128,8 +129,8 @@ export default function DeviceSelector({ interviewId, questionId }: DeviceSelect
             return
         }
 
-        localStorage.setItem('selectedCamera', selectedCamera)
-        localStorage.setItem('selectedMicrophone', selectedMicrophone)
+        // Store device settings with session management
+        storeDeviceSettings(selectedCamera, selectedMicrophone)
 
         router.push(`/interviews/job/${interviewId}/questions/${questionId}`)
     }

@@ -9,6 +9,7 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 import { ChevronLeft, Check, Lock } from 'lucide-react';
+import { QuestionButton, QuickStartButton } from './client-wrapper';
 
 
 export async function generateMetadata() {
@@ -112,11 +113,17 @@ export default async function InterviewPage({ params }: { params: Promise<{ inte
 
             {firstUnansweredQuestion && !allQuestionsAnswered && (
                 <Card className="p-4 mb-6 bg-blue-50 border-blue-200 dark:bg-blue-950 dark:border-blue-800">
-                    <div className="flex items-center gap-2 text-blue-800 dark:text-blue-200">
-                        <div className="h-2 w-2 rounded-full bg-blue-500 animate-pulse" />
-                        <span className="text-sm font-medium">
-                            Continue with Question {firstUnansweredQuestion.questionNumber}
-                        </span>
+                    <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2 text-blue-800 dark:text-blue-200">
+                            <div className="h-2 w-2 rounded-full bg-blue-500 animate-pulse" />
+                            <span className="text-sm font-medium">
+                                Continue with Question {firstUnansweredQuestion.questionNumber}
+                            </span>
+                        </div>
+                        <QuickStartButton 
+                            interviewId={interview.id} 
+                            questionId={firstUnansweredQuestion.id} 
+                        />
                     </div>
                 </Card>
             )}
@@ -126,7 +133,7 @@ export default async function InterviewPage({ params }: { params: Promise<{ inte
                     <div className="flex items-center gap-2 text-green-800 dark:text-green-200">
                         <Check className="h-4 w-4" />
                         <span className="text-sm font-medium">
-                            All questions completed! You can review or redo any question.
+                            Interview completed! All questions have been submitted and are now locked.
                         </span>
                     </div>
                 </Card>
@@ -140,14 +147,15 @@ export default async function InterviewPage({ params }: { params: Promise<{ inte
                     return (
                         <Card
                             key={question.id}
-                            className={`p-6 transition-all duration-200 ${isLocked
-                                ? 'opacity-60 bg-muted/50'
-                                : isCompleted
-                                    ? 'border-green-200 bg-green-50/30 dark:border-green-800 dark:bg-green-950/30'
-                                    : question.isAccessible
-                                        ? 'border-blue-200 bg-blue-50/30 dark:border-blue-800 dark:bg-blue-950/30'
-                                        : ''
-                                }`}
+                            className={`p-6 transition-all duration-200 ${
+                                isCompleted
+                                    ? 'border-green-200 bg-green-50/50 dark:border-green-800 dark:bg-green-950/50'
+                                    : isLocked 
+                                        ? 'opacity-60 bg-muted/50' 
+                                        : question.isAccessible 
+                                            ? 'border-blue-200 bg-blue-50/30 dark:border-blue-800 dark:bg-blue-950/30'
+                                            : ''
+                            }`}
                             data-testid={`interview-question-${index + 1}`}
                         >
                             <div className="flex justify-between items-start mb-4">
@@ -166,7 +174,7 @@ export default async function InterviewPage({ params }: { params: Promise<{ inte
                                     </div>
                                     {isCompleted && (
                                         <span className="text-xs text-green-600 dark:text-green-400 font-medium">
-                                            Completed
+                                            Completed & Locked
                                         </span>
                                     )}
                                 </div>
@@ -179,24 +187,27 @@ export default async function InterviewPage({ params }: { params: Promise<{ inte
                                 {question.questionText}
                             </p>
 
-                            <Button
-                                className="w-full"
-                                disabled={isLocked}
-                                variant={isCompleted ? "outline" : "default"}
-                                asChild={!isLocked}
-                                data-testid={`start-question-${index + 1}-button`}
+                            <QuestionButton
+                                interviewId={interview.id}
+                                questionId={question.id}
+                                questionNumber={index + 1}
+                                isLocked={isLocked}
+                                isCompleted={isCompleted}
                             >
                                 {isLocked ? (
                                     <div className="flex items-center gap-2">
                                         <Lock className="h-4 w-4" />
                                         Complete Previous Questions
                                     </div>
+                                ) : isCompleted ? (
+                                    <div className="flex items-center gap-2">
+                                        <Check className="h-4 w-4" />
+                                        Question Completed
+                                    </div>
                                 ) : (
-                                    <Link href={`/interviews/job/${interview.id}/questions/${question.id}`}>
-                                        {isCompleted ? `Review Question ${index + 1}` : `Start Question ${index + 1}`}
-                                    </Link>
+                                    `Start Question ${index + 1}`
                                 )}
-                            </Button>
+                            </QuestionButton>
                         </Card>
                     );
                 })}

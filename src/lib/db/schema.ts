@@ -61,7 +61,7 @@ export const interviewAnswers = pgTable('interview_answers', {
   id: uuid('id').primaryKey().default(sql`uuid_generate_v4()`),
   interviewId: uuid('interview_id').references(() => interviews.id).notNull(),
   interviewQuestionId: uuid('interview_question_id').references(() => interviewQuestions.id).notNull(),
-  answerText: text('answer_text'),
+  transcription: text('transcription'),
   evaluation: text('evaluation'),
   redoAttemptNumber: integer('redo_attempt_number').default(0),
   // Analysis metrics
@@ -72,7 +72,6 @@ export const interviewAnswers = pgTable('interview_answers', {
   interpersonalScores: jsonb('interpersonal_scores'),
   speechMetrics: jsonb('speech_metrics'),
   improvementSuggestions: jsonb('improvement_suggestions'),
-  transcription: text('transcription'),
   audioUrl: text('audio_url'),
   audioDurationMs: integer('audio_duration_ms'),
   analyzedAt: timestamp('analyzed_at'),
