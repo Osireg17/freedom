@@ -8,7 +8,7 @@ import { Progress } from '@/components/ui/progress'
 import { useErrorLogging } from '@/hooks/use-error-logging'
 import { toast } from 'sonner'
 import { Camera, Loader2, VideoOff } from 'lucide-react'
-import { getSelectedCamera, getSelectedMicrophone } from '@/lib/device-session'
+import { getSelectedCamera, getSelectedMicrophone, hasValidDeviceSettings, getActiveMediaStream } from '@/lib/device-session'
 
 interface VideoRecorderProps {
     interviewId: string
@@ -62,7 +62,17 @@ export default function VideoRecorder({
     const animationFrameRef = useRef<number | null>(null)
 
     useEffect(() => {
-        // Use session-based device settings
+        // Check if we have a persisted stream from device setup
+        const existingStream = getActiveMediaStream()
+
+        if (existingStream && hasValidDeviceSettings()) {
+            console.log('Using persisted media stream from device setup')
+            // Use the existing stream directly
+            setWebcamReady(true)
+            return
+        }
+
+        // Use session-based device settings for new stream
         const selectedCamera = getSelectedCamera()
         const selectedMicrophone = getSelectedMicrophone()
 
@@ -93,10 +103,14 @@ export default function VideoRecorder({
     // Automatically start the preparation timer after component mounts and webcam is ready
     useEffect(() => {
         if (status === 'idle' && videoConstraints && webcamReady) {
-            // Add a small delay to ensure webcam has time to initialize
+            // Use session-based device settings to determine delay
+            const hasDeviceSettings = getSelectedCamera() && getSelectedMicrophone()
+            // Shorter delay if device settings already exist (faster transition from device setup)
+            const delay = hasDeviceSettings ? 200 : 1000
+
             const timer = setTimeout(() => {
                 startPrepTimer()
-            }, 1000)
+            }, delay)
             return () => clearTimeout(timer)
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -496,47 +510,94 @@ export default function VideoRecorder({
         return (
             <>
                 <div className="relative w-full h-full bg-black">
-                    {/* Only render Webcam component when videoConstraints is properly set */}
-                    {videoConstraints && (
-                        <Webcam
-                            key={webcamKey}
-                            audio={true}
-                            audioConstraints={audioConstraints}
-                            ref={webcamRef}
-                            videoConstraints={videoConstraints}
-                            muted={true}
-                            className={showFace ? "w-full h-full object-cover" : "w-full h-full object-cover opacity-0 absolute"}
-                            data-testid="webcam-video"
-                            onUserMedia={() => {
-                                console.log('Webcam ready - user media obtained')
-                                setWebcamReady(true)
-                            }}
-                            onUserMediaError={(error) => {
-                                logError(error, {
-                                    context: 'VideoRecorder.webcam',
-                                    interviewId
-                                })
-                                setStatus('error')
-                                setWebcamReady(false)
-                                toast.error('Failed to access camera or microphone')
-                            }}
-                        />
-                    )}
+                    {/* Check for existing stream first, then render Webcam component */}
+                    {(() => {
+                        const existingStream = getActiveMediaStream()
+
+                        if (existingStream && hasValidDeviceSettings()) {
+                            // Use existing stream with a video element
+                            return (
+                                <video
+                                    ref={(video) => {
+                                        if (video && existingStream) {
+                                            video.srcObject = existingStream
+                                            video.play().catch(console.error)
+                                            // Set webcamRef.current.stream for compatibility
+                                            if (webcamRef.current) {
+                                                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                                                (webcamRef.current as any).stream = existingStream
+                                            }
+                                        }
+                                    }}
+                                    muted={true}
+                                    autoPlay
+                                    playsInline
+                                    className={showFace ? "w-full h-full object-cover" : "w-full h-full object-cover opacity-0 absolute"}
+                                    data-testid="webcam-video"
+                                />
+                            )
+                        }
+
+                        // Fallback to Webcam component for new streams
+                        return videoConstraints && (
+                            <Webcam
+                                key={webcamKey}
+                                audio={true}
+                                audioConstraints={audioConstraints}
+                                ref={webcamRef}
+                                videoConstraints={videoConstraints}
+                                muted={true}
+                                className={showFace ? "w-full h-full object-cover" : "w-full h-full object-cover opacity-0 absolute"}
+                                data-testid="webcam-video"
+                                onUserMedia={() => {
+                                    console.log('Webcam ready - user media obtained')
+                                    setWebcamReady(true)
+                                }}
+                                onUserMediaError={(error) => {
+                                    logError(error, {
+                                        context: 'VideoRecorder.webcam',
+                                        interviewId
+                                    })
+                                    setStatus('error')
+                                    setWebcamReady(false)
+                                    toast.error('Failed to access camera or microphone')
+                                }}
+                            />
+                        )
+                    })()}
 
                     {/* Show loading state when videoConstraints is not yet set or webcam not ready */}
-                    {(!videoConstraints || !webcamReady) && (
-                        <div className="absolute inset-0 flex items-center justify-center">
-                            <div className="text-center p-4 bg-background/80 rounded-lg">
-                                <Loader2 className="h-16 w-16 mx-auto text-muted-foreground animate-spin" />
-                                <p className="mt-2 text-muted-foreground">
-                                    {!videoConstraints ? 'Initializing camera...' : 'Connecting to camera...'}
-                                </p>
-                            </div>
-                        </div>
-                    )}
+                    {(() => {
+                        const existingStream = getActiveMediaStream()
+                        const hasExistingStream = existingStream && hasValidDeviceSettings()
+
+                        // Don't show loading if we have an existing stream
+                        if (hasExistingStream) return null
+
+                        // Show loading if no video constraints or webcam not ready
+                        if (!videoConstraints || !webcamReady) {
+                            return (
+                                <div className="absolute inset-0 flex items-center justify-center">
+                                    <div className="text-center p-4 bg-background/80 rounded-lg">
+                                        <Loader2 className="h-16 w-16 mx-auto text-muted-foreground animate-spin" />
+                                        <p className="mt-2 text-muted-foreground">
+                                            {!videoConstraints
+                                                ? 'Initializing camera...'
+                                                : hasValidDeviceSettings()
+                                                    ? 'Connecting to your selected camera...'
+                                                    : 'Connecting to camera...'
+                                            }
+                                        </p>
+                                    </div>
+                                </div>
+                            )
+                        }
+
+                        return null
+                    })()}
 
                     {/* Show placeholder overlay when camera preview is hidden */}
-                    {!showFace && videoConstraints && (
+                    {!showFace && (videoConstraints || (getActiveMediaStream() && hasValidDeviceSettings())) && (
                         <div className="absolute inset-0 flex items-center justify-center">
                             <div className="text-center p-4 bg-background/80 rounded-lg">
                                 <Camera className="h-16 w-16 mx-auto text-muted-foreground" />

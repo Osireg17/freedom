@@ -130,11 +130,18 @@ export default async function InterviewPage({ params }: { params: Promise<{ inte
 
             {allQuestionsAnswered && (
                 <Card className="p-4 mb-6 bg-green-50 border-green-200 dark:bg-green-950 dark:border-green-800">
-                    <div className="flex items-center gap-2 text-green-800 dark:text-green-200">
-                        <Check className="h-4 w-4" />
-                        <span className="text-sm font-medium">
-                            Interview completed! All questions have been submitted and are now locked.
-                        </span>
+                    <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2 text-green-800 dark:text-green-200">
+                            <Check className="h-4 w-4" />
+                            <span className="text-sm font-medium">
+                                Interview completed! All questions have been submitted and are now locked.
+                            </span>
+                        </div>
+                        <Button asChild className="bg-green-600 hover:bg-green-700">
+                            <Link href={`/interviews/job/${interview.id}/results`}>
+                                View Results
+                            </Link>
+                        </Button>
                     </div>
                 </Card>
             )}

@@ -9,7 +9,7 @@ import { Label } from '@/components/ui/label'
 import { toast } from 'sonner'
 import { useErrorLogging } from '@/hooks/use-error-logging'
 import { Mic } from 'lucide-react'
-import { storeDeviceSettings } from '@/lib/device-session'
+import { storeDeviceSettings, setActiveMediaStream } from '@/lib/device-session'
 
 interface DeviceSelectorProps {
     interviewId: string
@@ -131,6 +131,11 @@ export default function DeviceSelector({ interviewId, questionId }: DeviceSelect
 
         // Store device settings with session management
         storeDeviceSettings(selectedCamera, selectedMicrophone)
+
+        // Store the current webcam stream for reuse in the interview page
+        if (webcamRef.current?.stream) {
+            setActiveMediaStream(webcamRef.current.stream)
+        }
 
         router.push(`/interviews/job/${interviewId}/questions/${questionId}`)
     }
