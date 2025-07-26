@@ -42,6 +42,5 @@ next-env.d.ts
 
 .trigger
 
-.Supabase_local.txt
 # clerk configuration (can include secrets)
 /.clerk/
