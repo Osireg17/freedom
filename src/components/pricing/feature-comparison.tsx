@@ -173,11 +173,7 @@ export function FeatureComparison() {
         const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
         const errorStack = error instanceof Error ? error.stack : undefined;
 
-        logError({
-            message: errorMessage,
-            stack: errorStack,
-            componentStack: 'FeatureComparison',
-        });
+        logError(error, { componentStack: 'FeatureComparison' });
 
         // Return a simplified fallback UI
         return (
