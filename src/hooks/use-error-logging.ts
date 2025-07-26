@@ -85,7 +85,7 @@ export function useErrorLogging() {
       window.removeEventListener('error', handleGlobalError);
       window.removeEventListener('unhandledrejection', handleGlobalError);
     };
-  }, []);
+  }, [logError]);
 
   // Function to manually log caught errors
   const logCaughtError = (
