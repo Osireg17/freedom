@@ -75,7 +75,10 @@ export const recordInterviewTask = schemaTask({
         transcriptSnippet: transcript.substring(0, 100), // Log first 100 characters
       });
 
-      // 3. Update database with transcription
+      //TODO: 3. Need to send the transcript off for evaluation and scoring
+      // This part is not implemented in this task, but you can add it as needed.
+
+      // 4. Update database with transcription
       await db.update(interviewAnswers)
         .set({
           transcription: transcript,
@@ -88,7 +91,7 @@ export const recordInterviewTask = schemaTask({
         responseId: payload.responseId,
       });
 
-      // 4. Delete audio file from storage
+      // 5. Delete audio file from storage
       const { error: deleteError } = await supabaseAdmin.storage
         .from('interview-responses')
         .remove([payload.audioPath]);
