@@ -320,8 +320,11 @@ export default function VideoRecorder({
             }
             mediaRecorderRef.current = null
 
-            if (webcamRef.current && webcamRef.current.stream) {
-                webcamRef.current.stream.getTracks().forEach(track => track.stop());
+            if (webcamRef.current?.stream) {
+                const stream = webcamRef.current.stream;
+                if (stream instanceof MediaStream) {
+                    stream.getTracks().forEach(track => track.stop());
+                }
             }
 
             // Clear any existing timers
