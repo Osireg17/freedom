@@ -1,7 +1,14 @@
 // src/components/layout/footer.tsx
+'use client';
+import { usePathname } from 'next/navigation';
 import Link from 'next/link';
 
 export function Footer() {
+    const pathname = usePathname();
+    const isDashboardPage = pathname && pathname.startsWith('/dashboard');
+
+    if (isDashboardPage) return null;
+
     return (
         <footer className="w-full border-t bg-muted/50" data-testid="site-footer">
             <div className="container mx-auto py-8 md:py-12 px-4 md:px-6">
