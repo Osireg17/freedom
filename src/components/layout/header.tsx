@@ -20,7 +20,9 @@ export function Header() {
 
     // Don't render header on error pages
     const isErrorPage = pathname && pathname.startsWith('/error');
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    // TODO: This variable is currently unused but may be needed in the future
+    // for conditional rendering or route-specific logic. Ensure to remove it
+    // if it remains unused in the long term.
     const isDashboardPathname = pathname &&
         (pathname.startsWith('/dashboard') ||
             pathname.startsWith('/interviews') ||
