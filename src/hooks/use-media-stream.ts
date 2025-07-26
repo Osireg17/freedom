@@ -22,14 +22,15 @@ export function useMediaStream(videoDeviceId: string, audioDeviceId: string) {
     }, [videoDeviceId, audioDeviceId]);
 
     useEffect(() => {
+        const currentStreamRef = { current: stream };
         getStream();
 
         return () => {
-            if (stream) {
-                stream.getTracks().forEach(track => track.stop());
+            if (currentStreamRef.current) {
+                currentStreamRef.current.getTracks().forEach(track => track.stop());
             }
         };
-    }, [getStream, stream]);
+    }, [getStream]);
 
     return { stream, error };
 }
