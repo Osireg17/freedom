@@ -524,8 +524,7 @@ export default function VideoRecorder({
                                             video.play().catch(console.error)
                                             // Set webcamRef.current.stream for compatibility
                                             if (webcamRef.current) {
-                                                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                                                (webcamRef.current as any).stream = existingStream
+                                                (webcamRef.current as WebcamRef).stream = existingStream
                                             }
                                         }
                                     }}
