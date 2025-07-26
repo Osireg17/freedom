@@ -1,0 +1,8 @@
+/* src/styles/global.css - Removed sidebar-related styles */
+/* Add global styles here */
+@media (max-width: 767px) {
+    .responsive-container {
+        padding-left: 1rem;
+        padding-right: 1rem;
+    }
+}

@@ -1,5 +1,5 @@
 export const appConfig = {
-    name: 'Phoenix', // Codename
+    name: 'Freedom', // Codename
     productName: 'AceYourHireVue',
     description: 'AI-powered interview preparation for one-way interviews',
     url: process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000',
