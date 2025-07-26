@@ -66,8 +66,6 @@ export function FaqSection() {
         const errorString = error instanceof Error ? error.message : 'An error occurred';
         const errorStack = error instanceof Error ? error.stack : undefined;
         logError(error, {
-            message: errorString,
-            stack: errorStack,
             component: 'FaqSection'
         });
 
