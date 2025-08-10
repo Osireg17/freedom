@@ -25,6 +25,7 @@ jest.mock('@/lib/actions/auth-actions', () => ({
 // Mock db (Drizzle client)
 const mockFindFirstInterview = jest.fn();
 const mockFindManyQuestions = jest.fn();
+const mockFindManyAnswers = jest.fn();
 jest.mock('@/lib/db', () => ({
     db: {
         query: {
@@ -33,6 +34,9 @@ jest.mock('@/lib/db', () => ({
             },
             interviewQuestions: {
                 findMany: (...args: any[]) => mockFindManyQuestions(...args),
+            },
+            interviewAnswers: {
+                findMany: (...args: any[]) => mockFindManyAnswers(...args),
             },
         },
     },
@@ -43,10 +47,25 @@ jest.mock('@/components/ui/card', () => ({
     Card: ({ children, ...props }: { children: React.ReactNode }) => <div {...props}>{children}</div>,
 }));
 jest.mock('@/components/ui/button', () => ({
-    Button: ({ children, ...props }: { children: React.ReactNode }) => <button {...props}>{children}</button>,
+    Button: ({ children, asChild: _asChild, ...props }: { children: React.ReactNode; asChild?: boolean }) => <button {...props}>{children}</button>,
 }));
 jest.mock('lucide-react', () => ({
     ChevronLeft: (props: any) => <svg {...props} />,
+    Check: (props: any) => <svg {...props} />,
+    Lock: (props: any) => <svg {...props} />,
+}));
+
+// Mock client wrapper components that are client-side only
+jest.mock('../client-wrapper', () => ({
+    QuestionButton: ({ children, questionNumber, isLocked, isCompleted }: any) => (
+        <button
+            data-testid={`start-question-${questionNumber}-button`}
+            disabled={isLocked || isCompleted}
+        >
+            {children}
+        </button>
+    ),
+    QuickStartButton: () => <button>Quick Start</button>,
 }));
 
 // --- Test Setup ---
@@ -99,10 +118,8 @@ const mockQuestionsData = [
 ];
 
 // Helper function to render the component, handling the async nature
-const renderPage = async (params: { id: string }) => {
-    // Next.js Page components receive props asynchronously
+const renderPage = async (params: { interviewId: string }) => {
     const PageComponent = await InterviewPage({ params: Promise.resolve(params) });
-    // Render the resolved component
     return render(<>{PageComponent}</>);
 };
 
@@ -121,15 +138,15 @@ describe('InterviewPage', () => {
             // Throwing an error simulates the notFound behavior in tests
             throw new Error('NEXT_NOT_FOUND');
         });
+        mockFindManyAnswers.mockResolvedValue([]); // default: no answers yet
     });
 
     it('should render interview details and questions when found and authorized', async () => {
-        await renderPage({ id: mockInterviewId });
+        await renderPage({ interviewId: mockInterviewId });
 
         // Check protectRoute was called
         expect(mockProtectRoute).toHaveBeenCalledTimes(1);
 
-        // Check DB calls
         // Check DB calls
         expect(mockFindFirstInterview).toHaveBeenCalledTimes(1);
         // Apply the fix here too
@@ -139,13 +156,26 @@ describe('InterviewPage', () => {
             where: expect.anything(),
             orderBy: expect.any(Function),
         });
+        expect(mockFindManyAnswers).toHaveBeenCalledTimes(1);
+        expect(mockFindManyAnswers).toHaveBeenCalledWith({
+            where: expect.anything(),
+            orderBy: expect.any(Function),
+        });
 
         // Check rendered content
         expect(screen.getByRole('heading', { name: /Software Engineer Interview/i })).toBeInTheDocument();
         expect(screen.getByText(/TestCorp • 3 questions/i)).toBeInTheDocument();
         expect(screen.getByText('Tell me about yourself.')).toBeInTheDocument();
         expect(screen.getByText('Why TestCorp?')).toBeInTheDocument();
-        expect(screen.getAllByRole('button', { name: /Start Answering/i })).toHaveLength(3);
+        // Progress display
+        expect(screen.getByText(/Progress: 0 \/ 3 questions completed/i)).toBeInTheDocument();
+        // Quick start card
+        expect(screen.getByText(/Continue with Question 1/i)).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /Quick Start/i })).toBeInTheDocument();
+        // First question start button
+        expect(screen.getByTestId('start-question-1-button')).toBeInTheDocument();
+        // Locked questions text
+        expect(screen.getAllByText(/Complete Previous Questions/i)).toHaveLength(2);
         expect(screen.getByRole('link', { name: /Back to Dashboard/i })).toHaveAttribute('href', '/dashboard');
 
         // Check notFound was NOT called
@@ -156,7 +186,7 @@ describe('InterviewPage', () => {
         mockFindFirstInterview.mockResolvedValue(null); // Simulate interview not found
 
         // Expect the component promise to reject or throw due to notFound()
-        await expect(InterviewPage({ params: Promise.resolve({ id: mockInterviewId }) }))
+        await expect(InterviewPage({ params: Promise.resolve({ interviewId: mockInterviewId }) }))
             .rejects.toThrow('NEXT_NOT_FOUND');
 
 
@@ -174,7 +204,7 @@ describe('InterviewPage', () => {
             userId: 'another-user-id', // Different user
         });
 
-        await expect(InterviewPage({ params: Promise.resolve({ id: mockInterviewId }) }))
+        await expect(InterviewPage({ params: Promise.resolve({ interviewId: mockInterviewId }) }))
             .rejects.toThrow('NEXT_NOT_FOUND');
 
         expect(mockFindFirstInterview).toHaveBeenCalledTimes(1);
@@ -185,7 +215,7 @@ describe('InterviewPage', () => {
     it('should call notFound if no questions are found for the interview', async () => {
         mockFindManyQuestions.mockResolvedValue([]); // Simulate no questions
 
-        await expect(InterviewPage({ params: Promise.resolve({ id: mockInterviewId }) }))
+        await expect(InterviewPage({ params: Promise.resolve({ interviewId: mockInterviewId }) }))
             .rejects.toThrow('NEXT_NOT_FOUND');
 
         expect(mockFindFirstInterview).toHaveBeenCalledTimes(1);
