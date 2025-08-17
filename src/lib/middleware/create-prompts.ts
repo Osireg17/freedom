@@ -1,6 +1,6 @@
 import { JobInterviewPayload } from '@/types/interview';
 
-// Helper function to generate the interview prompt - HIGHLY SPECIFIC TO JOB DESCRIPTION
+// Helper function to generate the interview prompt - 5 Questions Only
 export function generateInterviewPrompt(payload: JobInterviewPayload): string {
   const context = `
 JOB CONTEXT:
@@ -11,63 +11,42 @@ JOB CONTEXT:
 `;
 
   const instructions = `
-CRITICAL INSTRUCTIONS:
-You MUST analyze the Job Description above and extract SPECIFIC details to create targeted questions. 
+INSTRUCTIONS:
+You are an expert interviewer. Create **exactly 5 highly-targeted interview questions** for this role.
 
-STEP 1 - ANALYSIS REQUIRED:
-- What specific technologies, tools, or platforms are mentioned?
-- What are the exact responsibilities and daily tasks?
-- What specific challenges or problems does this role solve?
-- What industry-specific knowledge is required?
-- What specific metrics, outcomes, or deliverables are mentioned?
-- What team structures, stakeholders, or processes are described?
+QUESTION CATEGORIES (Balance required):
+1. **Technical / Functional Skills** — Role-specific hard skills, tools, or processes.
+2. **Behavioral / Situational** — Soft skills, teamwork, leadership, adaptability.
+3. **Strategy / Problem-Solving** — Decision-making, prioritization, improvements.
+4. **Industry / Business Knowledge** — Domain-specific trends, regulations, customer context.
 
-STEP 2 - QUESTION CREATION:
-Create 5 questions that directly reference and test the SPECIFIC elements found in the job description.
+RULES:
+- Use the job description to make each question **specific and realistic**.
+- Avoid generic wording (e.g., “Tell me about teamwork”).
+- Incorporate **technologies, processes, responsibilities, stakeholders, or metrics** mentioned.
+- Match complexity to ${payload.yearsExperience} years of experience.
+- Ensure each question can be answered in ${payload.timeToAnswer} seconds.
+- Cover at least **3 different categories** among the 5 questions.
 
-REQUIREMENTS:
-1. **USE SPECIFIC DETAILS**: Reference actual technologies, processes, or requirements from the job description
-2. **AVOID GENERIC QUESTIONS**: No "tell me about a time you worked with a team" - instead use specific team structures mentioned in the JD
-3. **REFERENCE ACTUAL RESPONSIBILITIES**: Use the exact tasks and challenges mentioned in the job description
-4. **INCLUDE SPECIFIC CONTEXT**: If the JD mentions specific industries, regulations, or business contexts, incorporate them
-5. **USE MENTIONED TECHNOLOGIES**: If specific tools, frameworks, or systems are listed, ask about them specifically
+EXAMPLES:
+❌ BAD: "How do you handle deadlines?"
+✅ GOOD: "This role requires managing overlapping product launch timelines with marketing and design teams. How would you handle conflicting priorities during a major release?"
+
+OUTPUT FORMAT:
+Return a JSON array of 5 items:
+
+[
+  {
+    "question": "string (the interview question)",
+    "category": "string (Technical | Behavioral | Strategy | Industry)",
+    "focus": "string (the JD element this tests, e.g., 'GDPR compliance in fintech products')"
+  }
+]
 `;
 
-  const examples = `
-EXAMPLE OF GOOD vs BAD:
-
-❌ BAD (Generic): "Tell me about a time you worked with cross-functional teams"
-✅ GOOD (Specific): "This role involves coordinating with the Product Marketing team on feature releases for our SaaS platform. Describe your experience working with marketing teams on technical product launches, particularly around API documentation or developer-facing features."
-
-❌ BAD (Generic): "How would you handle a performance issue?"
-✅ GOOD (Specific): "Our infrastructure handles 100M+ daily API calls using AWS Lambda and DynamoDB. Walk me through how you'd troubleshoot and optimize Lambda cold start times impacting our mobile app response rates."
-
-❌ BAD (Generic): "Describe your leadership experience"
-✅ GOOD (Specific): "As a Senior Backend Engineer, you'll mentor 2-3 junior developers while architecting our transition from MongoDB to PostgreSQL. Tell me about a time you led both technical architecture decisions and team mentoring simultaneously."
-`;
-
-  const guidelines = `
-SPECIFIC GUIDELINES:
-- **Extract Technologies**: If React, Python, AWS, etc. are mentioned, ask about them specifically
-- **Use Business Context**: If it's fintech, healthcare, e-commerce, etc., reference that industry
-- **Reference Scale/Metrics**: If "millions of users" or "real-time processing" is mentioned, incorporate that scale
-- **Include Stakeholders**: If "working with data scientists" or "partnering with ops team" is mentioned, ask about those specific relationships
-- **Address Constraints**: If "legacy systems" or "rapid scaling" is mentioned, create scenarios around those challenges
-- **Match Experience Level**: ${payload.yearsExperience} years - adjust complexity accordingly
-- **Time Limit**: ${payload.timeToAnswer} seconds per response
-
-CREATE QUESTIONS THAT ONLY SOMEONE FAMILIAR WITH THIS EXACT ROLE COULD ANSWER WELL.
-`;
-
-  return `You are an expert interviewer creating highly targeted questions for this specific role. 
+  return `You are generating structured, role-specific interview questions.
 
 ${context}
 
-${instructions}
-
-${examples}
-
-${guidelines}
-
-Generate 5 laser-focused questions that test the EXACT requirements and context from this job description.`.trim();
+${instructions}`;
 }
