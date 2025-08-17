@@ -1,7 +1,7 @@
 import { db } from '@/lib/db';
-import { interviewAnswers } from '@/lib/db/schema';
+import { interviewAnswers, users, interviewQuestions } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
-import { schemaTask, configure, logger, batch } from '@trigger.dev/sdk/v3';
+import { schemaTask, configure, logger } from '@trigger.dev/sdk/v3';
 import { createClient as createDeepgramClient } from '@deepgram/sdk';
 import { z } from 'zod';
 import { supabaseAdmin } from '@/lib/supabase/supabaseAdmin';
@@ -20,8 +20,6 @@ const RecordInterviewPayloadSchema = z.object({
   questionId: z.string(),
   userId: z.string(),
   audioPath: z.string(),
-  questionText: z.string(),
-  questionType: z.string(),
 });
 
 export const recordInterviewTask = schemaTask({
@@ -78,32 +76,106 @@ export const recordInterviewTask = schemaTask({
         transcriptSnippet: transcript.substring(0, 100), // Log first 100 characters
       });
 
-      await batch.triggerByTaskAndWait([
-      {
-        task: analyseSTARTask,
-        payload: {
-          transcription: transcript,
-          questionText: payload.questionText,
-          questionType: payload.questionType,
-        },
-      },
-
-    ]);
-
-      // 4. Update database with transcription
-      await db.update(interviewAnswers)
-        .set({
-          transcription: transcript,
-          updatedAt: new Date(),
-          audioUrl: payload.audioPath
+      // 3. Get user subscription tier and question data for analysis
+      const [userData, questionData] = await Promise.all([
+        db.select({
+          subscriptionTier: users.subscriptionTier,
         })
-        .where(eq(interviewAnswers.id, payload.responseId));
+        .from(users)
+        .where(eq(users.id, payload.userId))
+        .limit(1),
 
-      logger.info('Database updated with transcription', {
+        db.select({
+          questionText: interviewQuestions.questionText,
+          questionType: interviewQuestions.questionType,
+        })
+        .from(interviewQuestions)
+        .where(eq(interviewQuestions.id, payload.questionId))
+        .limit(1)
+      ]);
+
+      const userTier = userData[0]?.subscriptionTier || 'free';
+      const question = questionData[0];
+
+      if (!question) {
+        throw new Error(`Question not found: ${payload.questionId}`);
+      }
+
+      logger.info('Starting STAR analysis with batch.triggerAndWait', {
         responseId: payload.responseId,
+        userTier,
+        questionType: question.questionType,
       });
 
-      // 5. Delete audio file from storage
+      // 4. Run STAR analysis using the task directly
+      let starAnalysisResult = null;
+      let overallScore = null;
+      const errors: string[] = [];
+
+      try {
+        const taskResult = await analyseSTARTask.triggerAndWait({
+          transcription: transcript,
+          questionText: question.questionText,
+          questionType: question.questionType,
+          userTier: userTier,
+          answerId: payload.responseId,
+        });
+
+        if (taskResult.ok) {
+          starAnalysisResult = taskResult.output;
+          overallScore = taskResult.output.overallScore;
+
+          logger.info("STAR analysis successful", {
+            responseId: payload.responseId,
+            overallScore: taskResult.output.overallScore,
+            starCompleteness: taskResult.output.starCompleteness,
+          });
+
+          // 5. Update database with transcription and analysis results
+          await db.update(interviewAnswers)
+            .set({
+              transcription: transcript,
+              overallScore: overallScore,
+              starScores: starAnalysisResult,
+              evaluation: starAnalysisResult.evaluation,
+              analyzedAt: new Date(),
+              updatedAt: new Date(),
+              audioUrl: payload.audioPath
+            })
+            .where(eq(interviewAnswers.id, payload.responseId));
+
+          logger.info('Database updated with transcription and analysis', {
+            responseId: payload.responseId,
+            overallScore,
+          });
+
+        } else {
+          throw new Error(`Task failed: ${taskResult.error}`);
+        }
+
+      } catch (analysisError) {
+        const errorMsg = `STAR analysis failed: ${analysisError instanceof Error ? analysisError.message : 'Unknown error'}`;
+        errors.push(errorMsg);
+        logger.error("STAR analysis failed", {
+          error: analysisError instanceof Error ? analysisError.message : 'Unknown error',
+          responseId: payload.responseId,
+        });
+
+        // If analysis fails, only store transcription without scores
+        await db.update(interviewAnswers)
+          .set({
+            transcription: transcript,
+            updatedAt: new Date(),
+            audioUrl: payload.audioPath
+          })
+          .where(eq(interviewAnswers.id, payload.responseId));
+
+        logger.info('Database updated with transcription only (analysis failed)', {
+          responseId: payload.responseId,
+        });
+      }
+
+      // 6. Delete audio file from storage
       const { error: deleteError } = await supabaseAdmin.storage
         .from('interview-responses')
         .remove([payload.audioPath]);
@@ -122,6 +194,12 @@ export const recordInterviewTask = schemaTask({
         responseId: payload.responseId,
         interviewId: payload.interviewId,
         transcript,
+        analysis: {
+          overallScore,
+          starAnalysis: starAnalysisResult,
+          errors,
+          hasAnalysis: !!starAnalysisResult,
+        },
       };
     } catch (error) {
       logger.error('Error processing interview recording', {
