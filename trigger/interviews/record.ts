@@ -1,10 +1,11 @@
 import { db } from '@/lib/db';
 import { interviewAnswers } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
-import { schemaTask, configure, logger } from '@trigger.dev/sdk/v3';
+import { schemaTask, configure, logger, batch } from '@trigger.dev/sdk/v3';
 import { createClient as createDeepgramClient } from '@deepgram/sdk';
 import { z } from 'zod';
 import { supabaseAdmin } from '@/lib/supabase/supabaseAdmin';
+import { analyseSTARTask } from './analyse-star-task';
 
 // Configure Trigger.dev
 configure({
@@ -19,6 +20,8 @@ const RecordInterviewPayloadSchema = z.object({
   questionId: z.string(),
   userId: z.string(),
   audioPath: z.string(),
+  questionText: z.string(),
+  questionType: z.string(),
 });
 
 export const recordInterviewTask = schemaTask({
@@ -75,8 +78,17 @@ export const recordInterviewTask = schemaTask({
         transcriptSnippet: transcript.substring(0, 100), // Log first 100 characters
       });
 
-      //TODO: 3. Need to send the transcript off for evaluation and scoring
-      // This part is not implemented in this task, but you can add it as needed.
+      await batch.triggerByTaskAndWait([
+      {
+        task: analyseSTARTask,
+        payload: {
+          transcription: transcript,
+          questionText: payload.questionText,
+          questionType: payload.questionType,
+        },
+      },
+
+    ]);
 
       // 4. Update database with transcription
       await db.update(interviewAnswers)

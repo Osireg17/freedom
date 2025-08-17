@@ -124,11 +124,170 @@ ALTER TABLE interview_answers ADD COLUMN IF NOT EXISTS job_alignment_breakdown j
 
 ## Implementation Details
 
-### 1. Enhanced Trigger.dev Job
+### 1. Enhanced Analysis Tasks (Fan-Out Pattern)
 
 ```typescript
-// jobs/analyze-interview-response.ts (Enhanced Version)
-export const analyzeInterviewResponse = job({
+// jobs/analysis-tasks.ts - Individual Analysis Tasks
+
+// STAR Method Analysis Task
+export const analyzeSTARTask = task({
+  id: "analyze-star-method",
+  queue: {
+    concurrencyLimit: 10
+  },
+  run: async (payload: {
+    transcription: string;
+    questionText: string;
+    questionType: string;
+    userTier: string;
+  }) => {
+    const { transcription, questionText, questionType, userTier } = payload;
+
+    const starPrompt = getSTARAnalysisPrompt(userTier);
+    
+    const starAnalysis = await openai.chat.completions.create({
+      model: userTier === 'pro' ? "gpt-4" : "gpt-4o-mini",
+      messages: [{
+        role: "system",
+        content: starPrompt
+      }, {
+        role: "user",
+        content: `QUESTION: ${questionText}\nRESPONSE: ${transcription}`
+      }],
+      response_format: { type: "json_object" }
+    });
+
+    return JSON.parse(starAnalysis.choices[0].message.content);
+  }
+});
+
+// Communication Analysis Task
+export const analyzeCommunicationTask = task({
+  id: "analyze-communication",
+  queue: {
+    concurrencyLimit: 10
+  },
+  run: async (payload: {
+    transcription: string;
+    speechMetrics: any;
+    userTier: string;
+  }) => {
+    const { transcription, speechMetrics, userTier } = payload;
+
+    const communicationPrompt = getCommunicationAnalysisPrompt(userTier);
+    
+    const communicationAnalysis = await openai.chat.completions.create({
+      model: userTier === 'pro' ? "gpt-4" : "gpt-4o-mini",
+      messages: [{
+        role: "system",
+        content: communicationPrompt
+      }, {
+        role: "user",
+        content: `TRANSCRIPTION: ${transcription}\nSPEECH_METRICS: ${JSON.stringify(speechMetrics)}`
+      }],
+      response_format: { type: "json_object" }
+    });
+
+    return JSON.parse(communicationAnalysis.choices[0].message.content);
+  }
+});
+
+// Contextual Relevance Analysis Task
+export const analyzeContextualRelevanceTask = task({
+  id: "analyze-contextual-relevance",
+  queue: {
+    concurrencyLimit: 8
+  },
+  run: async (payload: {
+    transcription: string;
+    questionText: string;
+    jobRequirements: any;
+    questionType: string;
+    userTier: string;
+  }) => {
+    const { transcription, questionText, jobRequirements, questionType, userTier } = payload;
+
+    // Skip for free tier
+    if (userTier === 'free' || !jobRequirements) {
+      return null;
+    }
+
+    const contextualPrompt = getContextualScoringPrompt(userTier, questionType);
+    
+    const contextualScoring = await openai.chat.completions.create({
+      model: userTier === 'pro' ? "gpt-4" : "gpt-4o-mini",
+      messages: [{
+        role: "system",
+        content: contextualPrompt
+      }, {
+        role: "user",
+        content: `
+          QUESTION: ${questionText}
+          RESPONSE: ${transcription}
+          JOB_REQUIREMENTS: ${JSON.stringify(jobRequirements)}
+          QUESTION_TYPE: ${questionType}
+        `
+      }],
+      response_format: { type: "json_object" }
+    });
+
+    return JSON.parse(contextualScoring.choices[0].message.content);
+  }
+});
+
+// Company Culture Alignment Task
+export const analyzeCompanyCultureTask = task({
+  id: "analyze-company-culture",
+  queue: {
+    concurrencyLimit: 8
+  },
+  run: async (payload: {
+    transcription: string;
+    questionText: string;
+    companyProfile: any;
+    userTier: string;
+  }) => {
+    const { transcription, questionText, companyProfile, userTier } = payload;
+
+    // Skip for free tier or no company data
+    if (userTier === 'free' || !companyProfile?.core_values) {
+      return null;
+    }
+
+    const culturePrompt = getCultureAlignmentPrompt(userTier);
+    
+    const cultureAlignment = await openai.chat.completions.create({
+      model: userTier === 'pro' ? "gpt-4" : "gpt-4o-mini",
+      messages: [{
+        role: "system",
+        content: culturePrompt
+      }, {
+        role: "user",
+        content: `
+          QUESTION: ${questionText}
+          RESPONSE: ${transcription}
+          COMPANY_VALUES: ${JSON.stringify(companyProfile.core_values)}
+          CULTURE_KEYWORDS: ${companyProfile.culture_keywords?.join(', ') || 'N/A'}
+        `
+      }],
+      response_format: { type: "json_object" }
+    });
+
+    const alignmentData = JSON.parse(cultureAlignment.choices[0].message.content);
+    
+    return {
+      company_profile_id: companyProfile.id,
+      ...alignmentData
+    };
+  }
+});
+```
+
+### 2. Enhanced Main Analysis Job (Fan-Out Orchestrator)
+
+```typescript
+// jobs/analyze-interview-response.ts (Enhanced with batchTriggerAndWait)
+export const analyzeInterviewResponse = task({
   id: "analyze-interview-response",
   name: "Analyze Interview Response with Contextual Scoring",
   version: "2.0.0",
@@ -174,74 +333,194 @@ export const analyzeInterviewResponse = job({
         })
       ]);
 
-      // Step 2: Configure Deepgram based on tier
+      // Step 2: Transcription and Context Preparation
       const deepgramConfig = getDeepgramConfig(userTier);
       
-      // Step 3: Parallel Processing - Transcription + Context Analysis
       const [transcriptionResult, jobRequirements, companyProfile] = await Promise.all([
         io.deepgram.transcribe("transcribe-audio", {
           url: audioData.data[0].audio_url,
           ...deepgramConfig
         }),
-        
-        // Extract job requirements (lightweight LLM call)
         extractJobRequirements(io, interviewData.data[0].job_description),
-        
-        // Get or research company profile
         getOrResearchCompanyProfile(io, interviewData.data[0].company_name)
       ]);
 
-      // Step 4: Comprehensive Analysis (Parallel)
-      const analysisPromises = [
-        // Existing analyses
-        analyzeSTARMethod(io, transcriptionResult, questionData.data[0], userTier),
-        analyzeCommunication(io, transcriptionResult, userTier),
+      const transcription = transcriptionResult.results.channels[0].alternatives[0].transcript;
+      const speechMetrics = transcriptionResult.metadata;
+
+      // Step 3: Fan-Out Analysis Using batchTriggerAndWait
+      const analysisPayloads = [
+        // STAR Analysis (always run)
+        {
+          task: "star",
+          payload: {
+            transcription,
+            questionText: questionData.data[0].question_text,
+            questionType: questionData.data[0].question_type,
+            userTier
+          }
+        },
         
-        // New contextual analyses
-        analyzeContextualRelevance(io, {
-          transcription: transcriptionResult.results.channels[0].alternatives[0].transcript,
-          questionText: questionData.data[0].question_text,
-          jobRequirements: jobRequirements,
-          questionType: questionData.data[0].question_type,
-          userTier
-        }),
-        
-        // Company culture alignment (only if company data available)
-        companyProfile ? analyzeCompanyCultureAlignment(io, {
-          transcription: transcriptionResult.results.channels[0].alternatives[0].transcript,
-          questionText: questionData.data[0].question_text,
-          companyProfile: companyProfile,
-          userTier
-        }) : Promise.resolve(null)
+        // Communication Analysis (always run)
+        {
+          task: "communication",
+          payload: {
+            transcription,
+            speechMetrics,
+            userTier
+          }
+        }
       ];
 
-      const [
-        starAnalysis,
-        communicationAnalysis,
-        contextualAnalysis,
-        cultureAlignment
-      ] = await Promise.all(analysisPromises);
+      // Add contextual analysis for Standard/Pro tiers
+      if (userTier !== 'free' && jobRequirements) {
+        analysisPayloads.push({
+          task: "contextual",
+          payload: {
+            transcription,
+            questionText: questionData.data[0].question_text,
+            jobRequirements,
+            questionType: questionData.data[0].question_type,
+            userTier
+          }
+        });
+      }
+
+      // Add company culture analysis for Standard/Pro tiers with company data
+      if (userTier !== 'free' && companyProfile?.core_values) {
+        analysisPayloads.push({
+          task: "culture",
+          payload: {
+            transcription,
+            questionText: questionData.data[0].question_text,
+            companyProfile,
+            userTier
+          }
+        });
+      }
+
+      // Execute all analysis tasks in parallel with proper error handling
+      const batchPayloads = analysisPayloads.map(({ task, payload }) => {
+        switch (task) {
+          case "star":
+            return { taskIdentifier: "star", payload };
+          case "communication":
+            return { taskIdentifier: "communication", payload };
+          case "contextual":
+            return { taskIdentifier: "contextual", payload };
+          case "culture":
+            return { taskIdentifier: "culture", payload };
+        }
+      });
+
+      // Fan-out to analysis tasks
+      const analysisResults = await Promise.all([
+        analyzeSTARTask.batchTriggerAndWait(
+          batchPayloads.filter(p => p.taskIdentifier === "star").map(p => p.payload)
+        ),
+        analyzeCommunicationTask.batchTriggerAndWait(
+          batchPayloads.filter(p => p.taskIdentifier === "communication").map(p => p.payload)
+        ),
+        ...(userTier !== 'free' ? [
+          analyzeContextualRelevanceTask.batchTriggerAndWait(
+            batchPayloads.filter(p => p.taskIdentifier === "contextual").map(p => p.payload)
+          ),
+          analyzeCompanyCultureTask.batchTriggerAndWait(
+            batchPayloads.filter(p => p.taskIdentifier === "culture").map(p => p.payload)
+          )
+        ] : [])
+      ]);
+
+      // Step 4: Process Results with Error Handling
+      const processedResults = {
+        starAnalysis: null,
+        communicationAnalysis: null,
+        contextualAnalysis: null,
+        cultureAlignment: null,
+        errors: []
+      };
+
+      // Process STAR analysis results
+      const starResults = analysisResults[0];
+      if (starResults?.runs?.[0]) {
+        if (starResults.runs[0].ok) {
+          processedResults.starAnalysis = starResults.runs[0].output;
+        } else {
+          processedResults.errors.push(`STAR analysis failed: ${starResults.runs[0].error}`);
+          await io.logger.error("STAR analysis failed", { 
+            error: starResults.runs[0].error,
+            answerId 
+          });
+        }
+      }
+
+      // Process Communication analysis results
+      const communicationResults = analysisResults[1];
+      if (communicationResults?.runs?.[0]) {
+        if (communicationResults.runs[0].ok) {
+          processedResults.communicationAnalysis = communicationResults.runs[0].output;
+        } else {
+          processedResults.errors.push(`Communication analysis failed: ${communicationResults.runs[0].error}`);
+          await io.logger.error("Communication analysis failed", { 
+            error: communicationResults.runs[0].error,
+            answerId 
+          });
+        }
+      }
+
+      // Process Contextual analysis results (if applicable)
+      if (analysisResults[2]?.runs?.[0]) {
+        if (analysisResults[2].runs[0].ok) {
+          processedResults.contextualAnalysis = analysisResults[2].runs[0].output;
+        } else {
+          processedResults.errors.push(`Contextual analysis failed: ${analysisResults[2].runs[0].error}`);
+          await io.logger.warn("Contextual analysis failed", { 
+            error: analysisResults[2].runs[0].error,
+            answerId 
+          });
+          // Don't fail entire job for contextual analysis
+        }
+      }
+
+      // Process Culture alignment results (if applicable)
+      if (analysisResults[3]?.runs?.[0]) {
+        if (analysisResults[3].runs[0].ok) {
+          processedResults.cultureAlignment = analysisResults[3].runs[0].output;
+        } else {
+          processedResults.errors.push(`Culture alignment failed: ${analysisResults[3].runs[0].error}`);
+          await io.logger.warn("Culture alignment failed", { 
+            error: analysisResults[3].runs[0].error,
+            answerId 
+          });
+          // Don't fail entire job for culture analysis
+        }
+      }
+
+      // Fail only if core analyses (STAR or Communication) failed
+      if (!processedResults.starAnalysis || !processedResults.communicationAnalysis) {
+        throw new Error(`Core analysis failed: ${processedResults.errors.join(', ')}`);
+      }
 
       // Step 5: Calculate Enhanced Overall Score
       const enhancedOverallScore = calculateEnhancedOverallScore({
-        starAnalysis,
-        communicationAnalysis,
-        contextualAnalysis,
-        cultureAlignment,
+        starAnalysis: processedResults.starAnalysis,
+        communicationAnalysis: processedResults.communicationAnalysis,
+        contextualAnalysis: processedResults.contextualAnalysis,
+        cultureAlignment: processedResults.cultureAlignment,
         userTier,
         questionType: questionData.data[0].question_type
       });
 
       // Step 6: Generate Comprehensive Improvement Suggestions
       const improvementSuggestions = generateEnhancedSuggestions({
-        starAnalysis,
-        communicationAnalysis,
-        contextualAnalysis,
-        cultureAlignment,
+        starAnalysis: processedResults.starAnalysis,
+        communicationAnalysis: processedResults.communicationAnalysis,
+        contextualAnalysis: processedResults.contextualAnalysis,
+        cultureAlignment: processedResults.cultureAlignment,
         userTier
       });
 
-      // Step 7: Single Database Update
+      // Step 7: Store Results
       await io.supabase.runTask("store-enhanced-analysis", {
         query: `
           UPDATE interview_answers 
@@ -262,14 +541,14 @@ export const analyzeInterviewResponse = job({
         `,
         params: [
           enhancedOverallScore,
-          starAnalysis,
-          communicationAnalysis,
-          contextualAnalysis?.contentScores || null,
-          transcriptionResult.metadata,
+          processedResults.starAnalysis,
+          processedResults.communicationAnalysis,
+          processedResults.contextualAnalysis,
+          speechMetrics,
           improvementSuggestions,
-          transcriptionResult.results.channels[0].alternatives[0].transcript,
-          contextualAnalysis,
-          cultureAlignment,
+          transcription,
+          processedResults.contextualAnalysis,
+          processedResults.cultureAlignment,
           jobRequirements,
           answerId
         ]
@@ -278,13 +557,14 @@ export const analyzeInterviewResponse = job({
       return {
         success: true,
         overallScore: enhancedOverallScore,
-        hasContextualAnalysis: !!contextualAnalysis,
-        hasCultureAlignment: !!cultureAlignment,
+        hasContextualAnalysis: !!processedResults.contextualAnalysis,
+        hasCultureAlignment: !!processedResults.cultureAlignment,
+        errors: processedResults.errors,
         processingTime: Date.now() - ctx.run.startedAt.getTime()
       };
 
     } catch (error) {
-      await io.logger.error("Enhanced analysis failed", { 
+      await io.logger.error("Enhanced analysis completely failed", { 
         error: error.message, 
         answerId,
         stack: error.stack 
@@ -766,41 +1046,101 @@ interface CultureAlignment {
 3. **LLM Prompts**: Template caching for consistent prompts
 4. **Database Queries**: Optimized indexes for company lookups
 
-### Parallel Processing
+### Fan-Out Processing with batchTriggerAndWait
 
 ```typescript
-// Optimized processing flow
-const PROCESSING_STAGES = {
-  // Stage 1: Independent operations (parallel)
-  stage1: [
+// Optimized fan-out processing flow
+const PROCESSING_STRATEGY = {
+  // Stage 1: Data preparation (parallel)
+  preparation: [
     'deepgram_transcription',
-    'job_requirements_extraction',
+    'job_requirements_extraction', 
     'company_profile_lookup'
   ],
   
-  // Stage 2: Analysis operations (parallel, depends on stage 1)
-  stage2: [
-    'star_analysis',
-    'communication_analysis',
-    'contextual_analysis',
-    'culture_alignment'
-  ],
+  // Stage 2: Analysis fan-out (batchTriggerAndWait)
+  analysis_fanout: {
+    core_tasks: ['star_analysis', 'communication_analysis'], // Always run
+    enhanced_tasks: ['contextual_analysis', 'culture_alignment'], // Tier-dependent
+    concurrency_limits: {
+      star_analysis: 10,
+      communication_analysis: 10,
+      contextual_analysis: 8,
+      culture_alignment: 8
+    }
+  },
   
-  // Stage 3: Final processing (sequential)
-  stage3: [
-    'score_calculation',
+  // Stage 3: Results aggregation (sequential)
+  aggregation: [
+    'error_handling',
+    'score_calculation', 
     'suggestion_generation',
     'database_update'
   ]
+};
+
+// Error handling strategy for batch operations
+const BATCH_ERROR_STRATEGY = {
+  core_analysis_failure: 'FAIL_ENTIRE_JOB', // STAR/Communication must succeed
+  enhanced_analysis_failure: 'LOG_AND_CONTINUE', // Contextual/Culture can fail gracefully
+  retry_strategy: {
+    max_attempts: 3,
+    backoff_strategy: 'exponential'
+  }
 };
 ```
 
 ### Expected Performance Metrics
 
-- **Additional Processing Time**: 3-5 seconds
-- **Success Rate Target**: >95%
+- **Additional Processing Time**: 4-6 seconds (fan-out pattern reduces sequential delays)
+- **Success Rate Target**: >95% (improved error handling with graceful degradation)
 - **Cache Hit Rate**: >80% for company profiles
 - **LLM Token Usage**: ~500-1000 additional tokens per analysis
+- **Concurrency Benefits**: 
+  - STAR + Communication analysis: Parallel execution
+  - Enhanced analyses: Batch processing with controlled concurrency
+  - Error isolation: Individual task failures don't crash entire pipeline
+
+### Benefits of batchTriggerAndWait Implementation
+
+1. **Superior Error Handling**
+   - Individual task failure tracking with `.ok` property
+   - Granular error information for debugging
+   - Graceful degradation for non-critical analyses
+   - Core vs. enhanced analysis failure differentiation
+
+2. **Optimal Concurrency Control**
+   - Task-specific concurrency limits prevent resource overload
+   - Built-in queuing and backpressure handling
+   - Better resource utilization across analysis tasks
+
+3. **Improved Observability**
+   - Individual task performance tracking
+   - Detailed error logging per analysis component
+   - Clear success/failure metrics for monitoring
+
+4. **Trigger.dev Best Practices**
+   - Follows recommended fan-out pattern
+   - Proper task isolation and reusability
+   - Enhanced debugging and retry capabilities
+
+```typescript
+// Performance monitoring example
+const performanceMetrics = {
+  total_analysis_time: result.processingTime,
+  individual_task_times: {
+    star_analysis: starResults.runs[0]?.duration,
+    communication_analysis: communicationResults.runs[0]?.duration,
+    contextual_analysis: contextualResults?.runs[0]?.duration,
+    culture_alignment: cultureResults?.runs[0]?.duration
+  },
+  success_rates: {
+    core_analyses: (starSuccess && communicationSuccess) ? 1.0 : 0.0,
+    enhanced_analyses: enhancedSuccessCount / enhancedTotalCount
+  },
+  error_breakdown: processedResults.errors
+};
+```
 
 ---
 
@@ -870,32 +1210,58 @@ export function EnhancedFeedback({ analysis, userTier }: EnhancedFeedbackProps) 
 ### Phase 1: Foundation (Week 1-2)
 - [ ] Database schema updates and migrations
 - [ ] Company profiles table creation
-- [ ] Basic company research pipeline
+- [ ] Individual analysis task creation (STAR, Communication, Contextual, Culture)
+- [ ] Basic company research pipeline with caching
 - [ ] Enhanced job schema integration
 
-### Phase 2: Core Analysis (Week 2-3)
-- [ ] Contextual relevance analysis implementation
-- [ ] Company culture alignment analysis
-- [ ] Enhanced scoring algorithm
-- [ ] Existing job integration and testing
+### Phase 2: Core Analysis & Fan-Out (Week 2-3)
+- [ ] Implement batchTriggerAndWait orchestration in main job
+- [ ] Contextual relevance analysis task
+- [ ] Company culture alignment analysis task  
+- [ ] Enhanced scoring algorithm with weighted calculations
+- [ ] Error handling strategy for batch operations
+- [ ] Concurrency limit optimization per task type
 
-### Phase 3: Performance & Polish (Week 3-4)
-- [ ] Caching implementation
-- [ ] Performance optimization
-- [ ] Error handling and fallbacks
-- [ ] Comprehensive testing
+### Phase 3: Performance & Reliability (Week 3-4)
+- [ ] Company profile caching implementation
+- [ ] Performance optimization and load testing
+- [ ] Comprehensive error handling and fallback strategies
+- [ ] Monitoring and observability for batch operations
+- [ ] Task retry and failure recovery mechanisms
 
-### Phase 4: UI & UX (Week 4-5)
-- [ ] Enhanced feedback components
-- [ ] Tier-based feature display
-- [ ] Analytics dashboard updates
-- [ ] User onboarding updates
+### Phase 4: UI & User Experience (Week 4-5)
+- [ ] Enhanced feedback components for new scoring dimensions
+- [ ] Tier-based feature display and upgrade prompts
+- [ ] Analytics dashboard updates with new metrics
+- [ ] User onboarding updates for contextual features
+- [ ] A/B testing setup for scoring accuracy validation
 
 ### Phase 5: Launch & Monitor (Week 5-6)
-- [ ] Production deployment
-- [ ] Performance monitoring
-- [ ] User feedback collection
-- [ ] Iterative improvements
+- [ ] Production deployment with feature flags
+- [ ] Real-time performance monitoring and alerting
+- [ ] User feedback collection and analysis
+- [ ] Batch operation success rate monitoring
+- [ ] Iterative improvements based on usage patterns
+
+### Key Implementation Considerations
+
+**batchTriggerAndWait Specific Setup:**
+- Configure appropriate concurrency limits per analysis type
+- Implement proper error handling for each batch result
+- Set up monitoring for individual task performance
+- Plan for graceful degradation when enhanced analyses fail
+
+**Testing Strategy for Batch Operations:**
+- Unit tests for individual analysis tasks
+- Integration tests for batch orchestration
+- Performance tests for concurrency limits
+- Error scenario testing for partial failures
+
+**Rollout Strategy:**
+- Feature flag control for enabling enhanced scoring
+- Gradual tier-based rollout (Pro → Standard → Free upgrades)
+- Monitoring dashboard for batch operation health
+- Quick rollback capability if issues arise
 
 ---
 
@@ -913,7 +1279,7 @@ describe('Contextual Analysis', () => {
       experience_level: "senior"
     };
 
-    const result = await analyzeContextualRelevance(mockIo, {
+    const result = await analyzeContextualRelevanceTask.testRun({
       transcription: mockTranscription,
       questionText: "Tell me about your leadership experience",
       jobRequirements: mockJobRequirements,
@@ -927,9 +1293,9 @@ describe('Contextual Analysis', () => {
   });
 
   test('should return null for free tier', async () => {
-    const result = await analyzeContextualRelevance(mockIo, {
+    const result = await analyzeContextualRelevanceTask.testRun({
       transcription: "test",
-      questionText: "test",
+      questionText: "test", 
       jobRequirements: {},
       questionType: "behavioral",
       userTier: "free"
@@ -940,12 +1306,73 @@ describe('Contextual Analysis', () => {
 });
 ```
 
+### Batch Operation Tests
+
+```typescript
+// tests/batch/batch-analysis.test.ts
+describe('Batch Analysis Operations', () => {
+  test('should handle successful batch operations', async () => {
+    const batchPayloads = [
+      {
+        transcription: "I successfully led a project...",
+        questionText: "Describe a leadership experience",
+        questionType: "behavioral",
+        userTier: "pro"
+      }
+    ];
+
+    const result = await analyzeSTARTask.batchTriggerAndWait(batchPayloads);
+
+    expect(result.runs).toHaveLength(1);
+    expect(result.runs[0].ok).toBe(true);
+    expect(result.runs[0].output).toBeDefined();
+  });
+
+  test('should handle batch failures gracefully', async () => {
+    const batchPayloads = [
+      {
+        transcription: "", // Invalid input
+        questionText: "Test question",
+        questionType: "behavioral", 
+        userTier: "pro"
+      }
+    ];
+
+    const result = await analyzeSTARTask.batchTriggerAndWait(batchPayloads);
+
+    expect(result.runs).toHaveLength(1);
+    
+    if (!result.runs[0].ok) {
+      expect(result.runs[0].error).toBeDefined();
+      // Should not throw, just return error information
+    }
+  });
+
+  test('should respect concurrency limits', async () => {
+    const batchPayloads = Array(15).fill(null).map((_, i) => ({
+      transcription: `Test transcription ${i}`,
+      questionText: "Test question",
+      questionType: "behavioral",
+      userTier: "pro"
+    }));
+
+    const startTime = Date.now();
+    const result = await analyzeSTARTask.batchTriggerAndWait(batchPayloads);
+    const duration = Date.now() - startTime;
+
+    expect(result.runs).toHaveLength(15);
+    // With concurrency limit of 10, should take longer than if all ran at once
+    expect(duration).toBeGreaterThan(1000); // Rough estimate
+  });
+});
+```
+
 ### Integration Tests
 
 ```typescript
 // tests/integration/enhanced-analysis.test.ts
 describe('Enhanced Analysis Integration', () => {
-  test('should complete full analysis pipeline', async () => {
+  test('should complete full analysis pipeline with fan-out', async () => {
     const mockPayload = {
       answerId: 'test-answer-id',
       userId: 'test-user-id',
@@ -960,6 +1387,73 @@ describe('Enhanced Analysis Integration', () => {
     expect(result.success).toBe(true);
     expect(result.overallScore).toBeGreaterThan(0);
     expect(result.hasContextualAnalysis).toBe(true);
+    expect(result.errors).toBeDefined(); // Should track any component errors
+  });
+
+  test('should handle core analysis failure', async () => {
+    // Mock STAR analysis failure
+    jest.spyOn(analyzeSTARTask, 'batchTriggerAndWait').mockResolvedValue({
+      runs: [{
+        ok: false,
+        error: 'STAR analysis failed',
+        id: 'test-run-id'
+      }]
+    });
+
+    const mockPayload = {
+      answerId: 'test-answer-id',
+      userId: 'test-user-id', 
+      interviewId: 'test-interview-id',
+      questionId: 'test-question-id',
+      audioUrl: 'test-audio-url',
+      userTier: 'pro'
+    };
+
+    await expect(
+      analyzeInterviewResponse.testRun(mockPayload)
+    ).rejects.toThrow('Core analysis failed');
+  });
+
+  test('should continue despite enhanced analysis failures', async () => {
+    // Mock contextual analysis failure but STAR/communication success
+    jest.spyOn(analyzeContextualRelevanceTask, 'batchTriggerAndWait').mockResolvedValue({
+      runs: [{
+        ok: false,
+        error: 'Contextual analysis failed',
+        id: 'test-run-id'
+      }]
+    });
+
+    jest.spyOn(analyzeSTARTask, 'batchTriggerAndWait').mockResolvedValue({
+      runs: [{
+        ok: true,
+        output: { overall_star_score: 85 },
+        id: 'test-run-id'
+      }]
+    });
+
+    jest.spyOn(analyzeCommunicationTask, 'batchTriggerAndWait').mockResolvedValue({
+      runs: [{
+        ok: true,
+        output: { overall_score: 80 },
+        id: 'test-run-id'
+      }]
+    });
+
+    const mockPayload = {
+      answerId: 'test-answer-id',
+      userId: 'test-user-id',
+      interviewId: 'test-interview-id', 
+      questionId: 'test-question-id',
+      audioUrl: 'test-audio-url',
+      userTier: 'pro'
+    };
+
+    const result = await analyzeInterviewResponse.testRun(mockPayload);
+
+    expect(result.success).toBe(true);
+    expect(result.hasContextualAnalysis).toBe(false);
+    expect(result.errors).toContain('Contextual analysis failed');
   });
 });
 ```
@@ -967,27 +1461,46 @@ describe('Enhanced Analysis Integration', () => {
 ### Performance Tests
 
 ```typescript
-// tests/performance/analysis-timing.test.ts
-describe('Analysis Performance', () => {
-  test('should complete within acceptable time limits', async () => {
+// tests/performance/batch-performance.test.ts
+describe('Batch Analysis Performance', () => {
+  test('should complete batch operations within time limits', async () => {
+    const batchSize = 5;
+    const payloads = Array(batchSize).fill(null).map((_, i) => ({
+      transcription: `Test response ${i}`,
+      questionText: "Test question",
+      questionType: "behavioral", 
+      userTier: "pro"
+    }));
+
     const startTime = Date.now();
-    
-    await analyzeInterviewResponse.testRun(mockPayload);
-    
+    const result = await analyzeSTARTask.batchTriggerAndWait(payloads);
     const duration = Date.now() - startTime;
-    expect(duration).toBeLessThan(15000); // 15 seconds max
+
+    expect(result.runs).toHaveLength(batchSize);
+    expect(duration).toBeLessThan(30000); // 30 seconds max for batch
+    
+    // Check success rate
+    const successRate = result.runs.filter(run => run.ok).length / batchSize;
+    expect(successRate).toBeGreaterThan(0.9); // 90% success rate
   });
 
-  test('should handle concurrent analyses', async () => {
-    const promises = Array(5).fill(null).map(() => 
-      analyzeInterviewResponse.testRun(mockPayload)
-    );
+  test('should handle high concurrency efficiently', async () => {
+    const highConcurrencyBatch = Array(20).fill(null).map((_, i) => ({
+      transcription: `High concurrency test ${i}`,
+      questionText: "Test question",
+      questionType: "behavioral",
+      userTier: "standard"
+    }));
 
-    const results = await Promise.all(promises);
+    const startTime = Date.now();
+    const result = await analyzeSTARTask.batchTriggerAndWait(highConcurrencyBatch);
+    const duration = Date.now() - startTime;
+
+    expect(result.runs).toHaveLength(20);
     
-    results.forEach(result => {
-      expect(result.success).toBe(true);
-    });
+    // Should complete faster than sequential processing
+    const estimatedSequentialTime = 20 * 3000; // 3s per task
+    expect(duration).toBeLessThan(estimatedSequentialTime * 0.6); // At least 40% faster
   });
 });
 ```
