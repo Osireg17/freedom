@@ -11,6 +11,7 @@ These enhancements integrate seamlessly with the existing STAR method and commun
 
 ## Table of Contents
 
+- [Project Structure Alignment](#project-structure-alignment)
 - [Technical Architecture](#technical-architecture)
 - [Database Schema Changes](#database-schema-changes)
 - [Implementation Details](#implementation-details)
@@ -19,6 +20,35 @@ These enhancements integrate seamlessly with the existing STAR method and commun
 - [User Experience Impact](#user-experience-impact)
 - [Implementation Roadmap](#implementation-roadmap)
 - [Testing Strategy](#testing-strategy)
+
+---
+
+## Project Structure Alignment
+
+This document has been updated to match your actual AceYourHireVue project structure:
+
+### ✅ Database Schema (Already Implemented)
+- **Company Profiles Table**: Already exists in `src/lib/db/schema.ts`
+- **Contextual Scoring Columns**: Already added to `interview_answers` table
+  - `contextualRelevanceScores: jsonb('contextual_relevance_scores')`
+  - `companyAlignmentScores: jsonb('company_alignment_scores')`
+  - `jobAlignmentBreakdown: jsonb('job_alignment_breakdown')`
+
+### 📁 Directory Structure Updates
+- **Trigger Jobs**: Located in `trigger/interviews/` (not `jobs/`)
+- **Analysis Utilities**: Will be created in `src/lib/analysis/`
+- **Components**: Will be created in `src/components/interviews/analysis/`
+- **Tests**: Located in `src/tests/` (not root-level `tests/`)
+
+### 🔧 Key Implementation Files
+- **Main Analysis Job**: `trigger/interviews/job.ts`
+- **Individual Analysis Tasks**: 
+  - `trigger/interviews/analyse-star-task.ts`
+  - `trigger/interviews/analyse-communication-task.ts` 
+  - `trigger/interviews/analyse-contextual-task.ts`
+  - `trigger/interviews/analyse-culture-task.ts`
+- **Analysis Utilities**: `src/lib/analysis/` (to be created)
+- **Enhanced UI Components**: `src/components/interviews/analysis/` (to be created)
 
 ---
 
@@ -127,7 +157,7 @@ ALTER TABLE interview_answers ADD COLUMN IF NOT EXISTS job_alignment_breakdown j
 ### 1. Enhanced Analysis Tasks (Fan-Out Pattern)
 
 ```typescript
-// jobs/analysis-tasks.ts - Individual Analysis Tasks
+// trigger/interviews/analyse-star-task.ts - Individual Analysis Tasks
 
 // STAR Method Analysis Task
 export const analyzeSTARTask = task({
@@ -161,7 +191,7 @@ export const analyzeSTARTask = task({
   }
 });
 
-// Communication Analysis Task
+// trigger/interviews/analyse-communication-task.ts
 export const analyzeCommunicationTask = task({
   id: "analyze-communication",
   queue: {
@@ -192,7 +222,7 @@ export const analyzeCommunicationTask = task({
   }
 });
 
-// Contextual Relevance Analysis Task
+// trigger/interviews/analyse-contextual-task.ts
 export const analyzeContextualRelevanceTask = task({
   id: "analyze-contextual-relevance",
   queue: {
@@ -235,7 +265,7 @@ export const analyzeContextualRelevanceTask = task({
   }
 });
 
-// Company Culture Alignment Task
+// trigger/interviews/analyse-culture-task.ts
 export const analyzeCompanyCultureTask = task({
   id: "analyze-company-culture",
   queue: {
@@ -286,7 +316,7 @@ export const analyzeCompanyCultureTask = task({
 ### 2. Enhanced Main Analysis Job (Fan-Out Orchestrator)
 
 ```typescript
-// jobs/analyze-interview-response.ts (Enhanced with batchTriggerAndWait)
+// trigger/interviews/job.ts (Enhanced with batchTriggerAndWait)
 export const analyzeInterviewResponse = task({
   id: "analyze-interview-response",
   name: "Analyze Interview Response with Contextual Scoring",
@@ -578,7 +608,7 @@ export const analyzeInterviewResponse = task({
 ### 2. Company Research Functions
 
 ```typescript
-// utils/company-research.ts
+// src/lib/analysis/company-research.ts
 export async function getOrResearchCompanyProfile(
   io: any, 
   companyName: string
@@ -693,7 +723,7 @@ async function researchCompanyValues(io: any, companyName: string) {
 ### 3. Contextual Relevance Analysis
 
 ```typescript
-// utils/contextual-analysis.ts
+// src/lib/analysis/contextual-analysis.ts
 export async function analyzeContextualRelevance(
   io: any,
   { transcription, questionText, jobRequirements, questionType, userTier }: {
@@ -778,7 +808,7 @@ function getContextualScoringPrompt(userTier: string, questionType: string): str
 ### 4. Company Culture Alignment Analysis
 
 ```typescript
-// utils/culture-analysis.ts
+// src/lib/analysis/culture-analysis.ts
 export async function analyzeCompanyCultureAlignment(
   io: any,
   { transcription, questionText, companyProfile, userTier }: {
@@ -862,7 +892,7 @@ function getCultureAlignmentPrompt(userTier: string): string {
 ### 5. Enhanced Scoring Algorithm
 
 ```typescript
-// utils/enhanced-scoring.ts
+// src/lib/analysis/enhanced-scoring.ts
 export function calculateEnhancedOverallScore({
   starAnalysis,
   communicationAnalysis,
@@ -1149,7 +1179,7 @@ const performanceMetrics = {
 ### Enhanced Feedback Interface
 
 ```tsx
-// components/analysis/enhanced-feedback.tsx
+// src/components/interviews/analysis/enhanced-feedback.tsx
 interface EnhancedFeedbackProps {
   analysis: EnhancedAnalysisResponse;
   userTier: string;
@@ -1208,16 +1238,17 @@ export function EnhancedFeedback({ analysis, userTier }: EnhancedFeedbackProps) 
 ## Implementation Roadmap
 
 ### Phase 1: Foundation (Week 1-2)
-- [ ] Database schema updates and migrations
-- [ ] Company profiles table creation
+- [x] Database schema updates and migrations (✅ Already completed)
+- [x] Company profiles table creation (✅ Already exists in schema.ts)
 - [ ] Individual analysis task creation (STAR, Communication, Contextual, Culture)
 - [ ] Basic company research pipeline with caching
 - [ ] Enhanced job schema integration
 
 ### Phase 2: Core Analysis & Fan-Out (Week 2-3)
-- [ ] Implement batchTriggerAndWait orchestration in main job
-- [ ] Contextual relevance analysis task
-- [ ] Company culture alignment analysis task  
+- [ ] Implement batchTriggerAndWait orchestration in trigger/interviews/job.ts
+- [ ] Create src/lib/analysis/ directory and utility files
+- [ ] Contextual relevance analysis task in trigger/interviews/analyse-contextual-task.ts
+- [ ] Company culture alignment analysis task in trigger/interviews/analyse-culture-task.ts
 - [ ] Enhanced scoring algorithm with weighted calculations
 - [ ] Error handling strategy for batch operations
 - [ ] Concurrency limit optimization per task type
@@ -1230,7 +1261,9 @@ export function EnhancedFeedback({ analysis, userTier }: EnhancedFeedbackProps) 
 - [ ] Task retry and failure recovery mechanisms
 
 ### Phase 4: UI & User Experience (Week 4-5)
+- [ ] Create src/components/interviews/analysis/ directory
 - [ ] Enhanced feedback components for new scoring dimensions
+- [ ] Update existing dashboard components in src/components/dashboard/
 - [ ] Tier-based feature display and upgrade prompts
 - [ ] Analytics dashboard updates with new metrics
 - [ ] User onboarding updates for contextual features
@@ -1270,7 +1303,7 @@ export function EnhancedFeedback({ analysis, userTier }: EnhancedFeedbackProps) 
 ### Unit Tests
 
 ```typescript
-// tests/scoring/contextual-analysis.test.ts
+// src/tests/analysis/contextual-analysis.test.ts
 describe('Contextual Analysis', () => {
   test('should analyze job alignment correctly', async () => {
     const mockTranscription = "I led a team of developers...";
@@ -1309,7 +1342,7 @@ describe('Contextual Analysis', () => {
 ### Batch Operation Tests
 
 ```typescript
-// tests/batch/batch-analysis.test.ts
+// src/tests/integration/batch-analysis.test.ts
 describe('Batch Analysis Operations', () => {
   test('should handle successful batch operations', async () => {
     const batchPayloads = [
@@ -1370,7 +1403,7 @@ describe('Batch Analysis Operations', () => {
 ### Integration Tests
 
 ```typescript
-// tests/integration/enhanced-analysis.test.ts
+// src/tests/integration/enhanced-analysis.test.ts
 describe('Enhanced Analysis Integration', () => {
   test('should complete full analysis pipeline with fan-out', async () => {
     const mockPayload = {
@@ -1461,7 +1494,7 @@ describe('Enhanced Analysis Integration', () => {
 ### Performance Tests
 
 ```typescript
-// tests/performance/batch-performance.test.ts
+// src/tests/integration/batch-performance.test.ts
 describe('Batch Analysis Performance', () => {
   test('should complete batch operations within time limits', async () => {
     const batchSize = 5;

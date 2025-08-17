@@ -38,7 +38,7 @@ export default async function JobInterviewPage() {
                         <Briefcase className="h-12 w-12 text-primary" />
                     </div>
                     <h1 className="text-4xl font-bold mt-14 mb-3 bg-clip-text text-transparent bg-gradient-to-r from-primary to-primary/70" data-testid="job-interview-page-heading">
-                        Job-Based Interview Practice
+                        Job Description Interview
                     </h1>
                     <p className="text-muted-foreground text-lg max-w-2xl mx-auto" data-testid="job-interview-page-description">
                         Create a personalized interview based on a specific job description to practice
