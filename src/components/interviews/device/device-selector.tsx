@@ -13,10 +13,9 @@ import { storeDeviceSettings, setActiveMediaStream } from '@/lib/device-session'
 
 interface DeviceSelectorProps {
     interviewId: string
-    questionId: string
 }
 
-export default function DeviceSelector({ interviewId, questionId }: DeviceSelectorProps) {
+export default function DeviceSelector({ interviewId }: DeviceSelectorProps) {
     const router = useRouter()
     const { logError } = useErrorLogging()
     const [cameras, setCameras] = useState<MediaDeviceInfo[]>([])
@@ -129,15 +128,29 @@ export default function DeviceSelector({ interviewId, questionId }: DeviceSelect
             return
         }
 
+        console.log('[DeviceSelector] Proceeding to video recorder...')
+        const startTime = performance.now()
+
         // Store device settings with session management
         storeDeviceSettings(selectedCamera, selectedMicrophone)
 
         // Store the current webcam stream for reuse in the interview page
         if (webcamRef.current?.stream) {
+            console.log('[DeviceSelector] Storing active stream for reuse:', {
+                streamId: webcamRef.current.stream.id,
+                videoTracks: webcamRef.current.stream.getVideoTracks().length,
+                audioTracks: webcamRef.current.stream.getAudioTracks().length,
+                active: webcamRef.current.stream.active
+            })
             setActiveMediaStream(webcamRef.current.stream)
+        } else {
+            console.warn('[DeviceSelector] No webcam stream available to store!')
         }
 
-        router.push(`/interviews/job/${interviewId}/questions/${questionId}`)
+        const setupTime = performance.now() - startTime
+        console.log(`[DeviceSelector] Device setup completed in ${setupTime.toFixed(2)}ms`)
+
+        router.push(`/interviews/job/${interviewId}/device-setup/connect`)
     }
 
     return (
