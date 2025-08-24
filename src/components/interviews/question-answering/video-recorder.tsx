@@ -27,6 +27,11 @@ type RecorderStatus =
     | 'submitting'
     | 'error'
 
+interface WebcamRef {
+    stream: MediaStream | null
+    video?: HTMLVideoElement | null
+}
+
 export default function VideoRecorder({
     interviewId,
     questionId,
@@ -49,7 +54,7 @@ export default function VideoRecorder({
     const [webcamKey, setWebcamKey] = useState(0)
     const [webcamReady, setWebcamReady] = useState(false)
 
-    const webcamRef = useRef<Webcam>(null)
+    const webcamRef = useRef<Webcam | WebcamRef>(null)
     const mediaRecorderRef = useRef<MediaRecorder | null>(null)
     const chunksRef = useRef<BlobPart[]>([])
     const prepTimerRef = useRef<NodeJS.Timeout | null>(null)
@@ -62,38 +67,41 @@ export default function VideoRecorder({
     const animationFrameRef = useRef<number | null>(null)
 
     useEffect(() => {
-        // Check if we have a persisted stream from device setup
+        console.log('[VideoRecorder] Initializing with pre-connected stream...')
+        const startTime = performance.now()
+        
+        // At this point, we should ALWAYS have a persisted stream from the connection page
         const existingStream = getActiveMediaStream()
 
         if (existingStream && hasValidDeviceSettings()) {
-            console.log('Using persisted media stream from device setup')
-            // Use the existing stream directly
+            console.log('[VideoRecorder] Using pre-connected stream from device setup', {
+                streamId: existingStream.id,
+                active: existingStream.active,
+                videoTracks: existingStream.getVideoTracks().length,
+                audioTracks: existingStream.getAudioTracks().length
+            })
+            
+            // Create webcam ref immediately for persisted stream
+            if (!webcamRef.current) {
+                webcamRef.current = {
+                    stream: existingStream,
+                    video: null
+                } as WebcamRef
+            } else {
+                (webcamRef.current as any).stream = existingStream
+            }
+            
+            // Set ready immediately - no delays needed since connection was already tested
             setWebcamReady(true)
+            const initTime = performance.now() - startTime
+            console.log(`[VideoRecorder] Pre-connected stream ready in ${initTime.toFixed(2)}ms`)
             return
         }
 
-        // Use session-based device settings for new stream
-        const selectedCamera = getSelectedCamera()
-        const selectedMicrophone = getSelectedMicrophone()
-
-        const constraints: MediaTrackConstraints = {
-            width: 1280,
-            height: 720,
-            facingMode: 'user'
-        }
-
-        if (selectedCamera) {
-            constraints.deviceId = { exact: selectedCamera }
-        }
-
-        setVideoConstraints(constraints)
-        setWebcamKey(prev => prev + 1)
-        setWebcamReady(false)
-
-        if (selectedMicrophone) {
-            console.log('Selected microphone ID:', selectedMicrophone)
-        }
-    }, [])
+        // Fallback: If somehow no stream is available, redirect back to device setup
+        console.warn('[VideoRecorder] No pre-connected stream found! Redirecting to device setup...')
+        window.location.href = `/interviews/job/${interviewId}/device-setup`
+    }, [interviewId])
 
     // Set up webcam constraints
     const audioConstraints = {
@@ -102,19 +110,17 @@ export default function VideoRecorder({
 
     // Automatically start the preparation timer after component mounts and webcam is ready
     useEffect(() => {
-        if (status === 'idle' && videoConstraints && webcamReady) {
-            // Use session-based device settings to determine delay
-            const hasDeviceSettings = getSelectedCamera() && getSelectedMicrophone()
-            // Shorter delay if device settings already exist (faster transition from device setup)
-            const delay = hasDeviceSettings ? 200 : 1000
-
-            const timer = setTimeout(() => {
-                startPrepTimer()
-            }, delay)
-            return () => clearTimeout(timer)
+        if (status === 'idle' && webcamReady) {
+            console.log('[VideoRecorder] Webcam ready, starting prep timer immediately')
+            const startTime = performance.now()
+            
+            startPrepTimer()
+            
+            const prepStartTime = performance.now() - startTime
+            console.log(`[VideoRecorder] Prep timer started in ${prepStartTime.toFixed(2)}ms`)
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [videoConstraints, status, webcamReady])
+    }, [status, webcamReady])
 
     // Start preparation timer
     const startPrepTimer = () => {
@@ -525,10 +531,17 @@ export default function VideoRecorder({
                                         if (video && existingStream) {
                                             video.srcObject = existingStream
                                             video.play().catch(console.error)
-                                            // Set webcamRef.current.stream for compatibility
-                                            if (webcamRef.current) {
-                                                (webcamRef.current as WebcamRef).stream = existingStream
+                                            // Create a mock webcam ref object for compatibility with recording logic
+                                            if (!webcamRef.current) {
+                                                webcamRef.current = {
+                                                    stream: existingStream,
+                                                    video: video
+                                                } as WebcamRef
+                                            } else {
+                                                (webcamRef.current as any).stream = existingStream
                                             }
+                                            // Mark webcam as ready since we have a working stream
+                                            setWebcamReady(true)
                                         }
                                     }}
                                     muted={true}
@@ -573,22 +586,28 @@ export default function VideoRecorder({
                         const existingStream = getActiveMediaStream()
                         const hasExistingStream = existingStream && hasValidDeviceSettings()
 
-                        // Don't show loading if we have an existing stream
-                        if (hasExistingStream) return null
+                        // Don't show loading if we have an existing stream and webcam is ready
+                        if (hasExistingStream && webcamReady) {
+                            console.log('[VideoRecorder] Skipping loading - using persisted stream')
+                            return null
+                        }
 
-                        // Show loading if no video constraints or webcam not ready
-                        if (!videoConstraints || !webcamReady) {
+                        // Show loading only when actually waiting for camera access
+                        if (!webcamReady) {
+                            const loadingMessage = hasExistingStream 
+                                ? 'Connecting to your selected camera...'
+                                : !videoConstraints
+                                    ? 'Initializing camera...'
+                                    : hasValidDeviceSettings()
+                                        ? 'Connecting to your selected camera...'
+                                        : 'Connecting to camera...'
+
                             return (
                                 <div className="absolute inset-0 flex items-center justify-center">
                                     <div className="text-center p-4 bg-background/80 rounded-lg">
                                         <Loader2 className="h-16 w-16 mx-auto text-muted-foreground animate-spin" />
                                         <p className="mt-2 text-muted-foreground">
-                                            {!videoConstraints
-                                                ? 'Initializing camera...'
-                                                : hasValidDeviceSettings()
-                                                    ? 'Connecting to your selected camera...'
-                                                    : 'Connecting to camera...'
-                                            }
+                                            {loadingMessage}
                                         </p>
                                     </div>
                                 </div>
