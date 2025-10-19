@@ -12,6 +12,8 @@ import { tasks } from "@trigger.dev/sdk/v3";
 import { supabaseAdmin } from '@/lib/supabase/supabaseAdmin';
 import { recordInterviewTask } from '../../../../../../../../trigger/interviews/record';
 
+//TODO: need to propagate the errors upwards rather than hiding them in a try-catch
+
 export const POST = withAxiom(async (
   req: NextRequest,
   { params }: { params: Promise<{ interviewId: string; questionId: string }> }

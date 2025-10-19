@@ -22,20 +22,22 @@ const jobInterviewRequestSchema = z.object({
   prepTime: z.string().refine((val) => !isNaN(Number(val))),
 });
 
+//TODO: need to propagate the errors upwards rather than hiding them in a try-catch
+
 export const POST = withAxiom(async (req: NextRequest) => {
   try {
     // Get authenticated user
     const user = await getCurrentUser();
     if (!user
     ) {
-      return NextResponse.json(ApiErrors.UNAUTHORIZED().toResponse(), { 
-        status: 401 
+      return NextResponse.json(ApiErrors.UNAUTHORIZED().toResponse(), {
+        status: 401
       });
     }
 
     // Parse request body
     const body = await req.json();
-    
+
     // Validate request data
     const validationResult = jobInterviewRequestSchema.safeParse(body);
     // Inside your POST handler
@@ -46,18 +48,18 @@ export const POST = withAxiom(async (req: NextRequest) => {
       path: error.path.join('.'),
       // Add any other fields required by ApiErrorDetails
     }));
-  
+
     return NextResponse.json(
-      ApiErrors.BAD_REQUEST('Invalid form data', errorDetails).toResponse(), 
+      ApiErrors.BAD_REQUEST('Invalid form data', errorDetails).toResponse(),
       { status: 400 }
     );
   }
-    
+
     const { jobTitle, companyName, jobDescription, yearsExperience, timeToAnswer, prepTime } = validationResult.data;
-    
+
     // Create interview record in the database
     const interviewId = uuidv4();
-    
+
     await db.insert(interviews).values({
       id: interviewId,
       userId: user.id,
@@ -71,7 +73,7 @@ export const POST = withAxiom(async (req: NextRequest) => {
       createdAt: new Date(),
       updatedAt: new Date(),
     });
-    
+
     // Trigger background job using Trigger.dev
     const handle = await tasks.trigger<typeof generateJobInterviewQuestionsJob>(
       "generate-job-interview-questions",
@@ -86,30 +88,30 @@ export const POST = withAxiom(async (req: NextRequest) => {
         prepTime: parseInt(prepTime),
       }
     );
-    
+
     // Log successful request
     logServerEvent('info', 'Job interview creation initiated', {
       userId: user.id,
       interviewId,
       jobRunId: handle.id
     });
-    
+
     // Return success response with the interview ID
-    return NextResponse.json({ 
-      success: true, 
+    return NextResponse.json({
+      success: true,
       interviewId,
       status: 'processing',
       message: 'Your interview is being created. You will be notified when it is ready.',
       runId: handle.id
     });
-    
+
   } catch (error) {
     // Log and return error
     logServerEvent('error', 'Failed to create job interview', {
       error: error instanceof Error ? error.message : String(error),
       stack: error instanceof Error ? error.stack : undefined,
     });
-    
+
     return NextResponse.json(
       ApiErrors.INTERNAL_ERROR('Failed to create interview. Please try again.').toResponse(),
       { status: 500 }
