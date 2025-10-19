@@ -22,7 +22,7 @@ const jobInterviewRequestSchema = z.object({
   prepTime: z.string().refine((val) => !isNaN(Number(val))),
 });
 
-//TODO: need to propagate the errors upwards rather than hiding them in a try-catch
+//TODO: need to propagate the errors upwards rather than hiding them in a try-catch this allows for better error handling
 
 export const POST = withAxiom(async (req: NextRequest) => {
   try {
