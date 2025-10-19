@@ -9,12 +9,14 @@ import { withAxiom } from '@/lib/axiom/server';
 import { getCurrentUser } from '@/lib/actions/auth-actions';
 import { runs } from '@trigger.dev/sdk/v3'; // Import the runs module
 
+//TODO: need to propagate the errors upwards rather than hiding them in a try-catch
+
 type RouteParams = {
   interviewId: string;
 };
 
-export const GET = withAxiom(async (req: NextRequest, 
-  { params }: { params: Promise<RouteParams> }) => { 
+export const GET = withAxiom(async (req: NextRequest,
+  { params }: { params: Promise<RouteParams> }) => {
   try {
     const resolvedParams = await params;
     const { interviewId } = resolvedParams;
@@ -29,31 +31,31 @@ export const GET = withAxiom(async (req: NextRequest,
         { status: 400 }
       );
     }
-    
+
     // Get authenticated user
     const user = await getCurrentUser();
     if (!user) {
-      return NextResponse.json(ApiErrors.UNAUTHORIZED().toResponse(), { 
-        status: 401 
+      return NextResponse.json(ApiErrors.UNAUTHORIZED().toResponse(), {
+        status: 401
       });
     }
-    
+
     // Optional: You might still want to fetch the interview to ensure it belongs to the user
     const interview = await db.query.interviews.findFirst({
       where: eq(interviews.id, interviewId),
       columns: { userId: true } // Only fetch necessary columns
     });
-    
+
     if (!interview) {
       return NextResponse.json(
-        ApiErrors.NOT_FOUND('Interview', interviewId).toResponse(), 
+        ApiErrors.NOT_FOUND('Interview', interviewId).toResponse(),
         { status: 404 }
       );
     }
-    
+
     if (interview.userId !== user.id) {
       return NextResponse.json(
-        ApiErrors.FORBIDDEN('You do not have permission to access this interview').toResponse(), 
+        ApiErrors.FORBIDDEN('You do not have permission to access this interview').toResponse(),
         { status: 403 }
       );
     }
@@ -113,7 +115,7 @@ export const GET = withAxiom(async (req: NextRequest,
             triggerDevStatus: runDetails.status
         });
     }
-    
+
     return NextResponse.json({
       interviewId,
       status,
@@ -121,14 +123,14 @@ export const GET = withAxiom(async (req: NextRequest,
       questionsCount,
       triggerDevRunStatus: runDetails.status // Optionally include the raw Trigger.dev status
     });
-    
+
   } catch (error) {
     // Log and return error
     logServerEvent('error', 'Failed to get interview status', {
       error: error instanceof Error ? error.message : String(error),
       stack: error instanceof Error ? error.stack : undefined,
     });
-    
+
     // Distinguish between API errors and Trigger.dev errors if possible
     if (error instanceof Error && error.message.includes('Could not find run with id')) {
          return NextResponse.json(

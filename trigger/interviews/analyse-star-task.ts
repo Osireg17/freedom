@@ -3,6 +3,7 @@ import getSTARAnalysisPrompt from "@/lib/middleware/star-prompt";
 import { task, logger } from "@trigger.dev/sdk/v3";
 import OpenAI from "openai";
 
+
 // Initialize OpenAI with consistent API key
 const openai = new OpenAI({
   apiKey: process.env.NEXT_PUBLIC_OPENAI_API_KEY || process.env.OPENAI_API_KEY,
@@ -100,10 +101,10 @@ export const analyseSTARTask = task({
 
       // Get tier-specific prompt
       const prompt = getSTARAnalysisPrompt(userTier);
-      
+
       // Select model based on tier
       const model = userTier === 'pro' ? 'gpt-5-mini' : 'gpt-4.1-mini';
-      
+
       logger.info("Calling OpenAI for STAR analysis", {
         model,
         userTier,
@@ -114,9 +115,9 @@ export const analyseSTARTask = task({
         model,
         messages: [
           { role: "system", content: prompt },
-          { 
-            role: "user", 
-            content: `QUESTION: ${questionText}\n\nINTERVIEW RESPONSE: ${transcription}\n\nQUESTION TYPE: ${questionType}` 
+          {
+            role: "user",
+            content: `QUESTION: ${questionText}\n\nINTERVIEW RESPONSE: ${transcription}\n\nQUESTION TYPE: ${questionType}`
           }
         ],
         response_format: { type: "json_object" },
