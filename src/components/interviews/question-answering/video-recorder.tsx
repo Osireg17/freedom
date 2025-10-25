@@ -17,10 +17,13 @@ import {
     getSelectedMicrophone,
 } from '@/lib/device-session';
 import DeviceSetupModal from '@/components/interviews/device/device-setup-modal';
+import InterviewIntroModal from '@/components/interviews/interview-intro-modal';
 
 interface VideoRecorderProps {
     interviewId: string;
     questionId: string;
+    questionNumber: number;
+    totalQuestions: number;
     showFace: boolean;
     prepTime: number;
     maxResponseTime: number;
@@ -38,6 +41,8 @@ type RecorderStatus =
 export default function VideoRecorder({
     interviewId,
     questionId,
+    questionNumber,
+    totalQuestions,
     showFace,
     prepTime,
     maxResponseTime,
@@ -56,10 +61,13 @@ export default function VideoRecorder({
     const [countdown, setCountdown] = useState(3);
     const [redoAttempts, setRedoAttempts] = useState(0);
 
-    // Device state
-    const [webcamReady, setWebcamReady] = useState(false);
+    // Modal state
+    const [showIntroModal, setShowIntroModal] = useState(false);
     const [showDeviceModal, setShowDeviceModal] = useState(false);
     const [webcamKey, setWebcamKey] = useState(0); // Force remount on device change
+
+    // Device state
+    const [webcamReady, setWebcamReady] = useState(false);
 
     // Refs
     const webcamRef = useRef<Webcam>(null);
@@ -113,14 +121,13 @@ export default function VideoRecorder({
         init();
     }, [logError]);
 
-    // Start prep timer when webcam is ready
+    // Show intro modal when webcam is ready
     useEffect(() => {
-        if (status === 'idle' && webcamReady) {
-            console.log('[VideoRecorder] Starting prep timer');
-            startPrepTimer();
+        if (status === 'idle' && webcamReady && !showIntroModal) {
+            console.log('[VideoRecorder] Webcam ready, showing intro modal');
+            setShowIntroModal(true);
         }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [status, webcamReady]);
+    }, [status, webcamReady, showIntroModal]);
 
     // Webcam event handlers
     const handleWebcamReady = useCallback(() => {
@@ -149,6 +156,20 @@ export default function VideoRecorder({
         },
         [logError]
     );
+
+    // Intro modal handlers
+    const handleStartInterview = useCallback(() => {
+        console.log('[VideoRecorder] Starting interview from intro modal');
+        setShowIntroModal(false);
+        // Start prep timer
+        startPrepTimer();
+    }, [prepTime]);
+
+    const handleCloseIntro = useCallback(() => {
+        console.log('[VideoRecorder] User closed intro modal');
+        setShowIntroModal(false);
+        // Don't start timer - user can click the button when ready
+    }, []);
 
     // Device modal handlers
     const handleOpenSettings = useCallback(() => {
@@ -369,6 +390,16 @@ export default function VideoRecorder({
 
     return (
         <>
+            <InterviewIntroModal
+                open={showIntroModal}
+                onStart={handleStartInterview}
+                onClose={handleCloseIntro}
+                questionNumber={questionNumber}
+                totalQuestions={totalQuestions}
+                prepTime={prepTime}
+                responseTime={maxResponseTime}
+            />
+
             <DeviceSetupModal open={showDeviceModal} onComplete={handleDeviceChange} />
 
             <div className="flex flex-col h-full p-6" data-testid="video-recorder">
@@ -499,6 +530,16 @@ export default function VideoRecorder({
 
                 {/* Controls */}
                 <div className="flex gap-4 justify-center">
+                    {status === 'idle' && webcamReady && (
+                        <Button
+                            onClick={handleStartInterview}
+                            size="lg"
+                            data-testid="manual-start-button"
+                        >
+                            Start Interview
+                        </Button>
+                    )}
+
                     {status === 'preparing' && (
                         <Button
                             variant="outline"
