@@ -7,8 +7,16 @@ import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
 import { useErrorLogging } from '@/hooks/use-error-logging'
 import { toast } from 'sonner'
-import { Camera, Loader2, VideoOff } from 'lucide-react'
-import { getSelectedCamera, getSelectedMicrophone, hasValidDeviceSettings, getActiveMediaStream } from '@/lib/device-session'
+import { Camera, Loader2, VideoOff, Settings } from 'lucide-react'
+import {
+    hasValidDeviceSettings,
+    getActiveMediaStream,
+    storeDeviceSettings,
+    setActiveMediaStream,
+    getSelectedCamera,
+    getSelectedMicrophone
+} from '@/lib/device-session'
+import DeviceSetupModal from '@/components/interviews/device/device-setup-modal'
 
 interface VideoRecorderProps {
     interviewId: string
@@ -27,11 +35,6 @@ type RecorderStatus =
     | 'submitting'
     | 'error'
 
-interface WebcamRef {
-    stream: MediaStream | null
-    video?: HTMLVideoElement | null
-}
-
 export default function VideoRecorder({
     interviewId,
     questionId,
@@ -41,6 +44,8 @@ export default function VideoRecorder({
 }: VideoRecorderProps) {
     const router = useRouter()
     const { logError } = useErrorLogging()
+
+    // Core state
     const [status, setStatus] = useState<RecorderStatus>('idle')
     const [prepTimeRemaining, setPrepTimeRemaining] = useState(prepTime)
     const [recordTimeRemaining, setRecordTimeRemaining] = useState(maxResponseTime)
@@ -50,79 +55,114 @@ export default function VideoRecorder({
     const [recordedVideoURL, setRecordedVideoURL] = useState<string | null>(null)
     const [countdown, setCountdown] = useState(3)
     const [redoAttempts, setRedoAttempts] = useState(0)
-    const [videoConstraints, setVideoConstraints] = useState<MediaTrackConstraints | null>(null)
-    const [webcamKey, setWebcamKey] = useState(0)
-    const [webcamReady, setWebcamReady] = useState(false)
 
-    const webcamRef = useRef<Webcam | WebcamRef>(null)
+    // Device state
+    const [webcamReady, setWebcamReady] = useState(false)
+    const [showDeviceModal, setShowDeviceModal] = useState(false)
+    const [webcamKey, setWebcamKey] = useState(0) // Force remount on device change
+
+    // Refs
+    const webcamRef = useRef<Webcam>(null)
     const mediaRecorderRef = useRef<MediaRecorder | null>(null)
     const chunksRef = useRef<BlobPart[]>([])
     const prepTimerRef = useRef<NodeJS.Timeout | null>(null)
     const recordTimerRef = useRef<NodeJS.Timeout | null>(null)
     const countdownTimerRef = useRef<NodeJS.Timeout | null>(null)
-    const audioAnalyserRef = useRef<AnalyserNode | null>(null)
-    const audioDataRef = useRef<Uint8Array | null>(null)
-    const audioContextRef = useRef<AudioContext | null>(null)
-    const audioStreamRef = useRef<MediaStream | null>(null)
-    const animationFrameRef = useRef<number | null>(null)
 
+    // Initialize devices on first load
     useEffect(() => {
-        console.log('[VideoRecorder] Initializing with pre-connected stream...')
-        const startTime = performance.now()
-        
-        // At this point, we should ALWAYS have a persisted stream from the connection page
-        const existingStream = getActiveMediaStream()
+        const init = async () => {
+            try {
+                // Check if we already have devices from session
+                if (hasValidDeviceSettings()) {
+                    console.log('[VideoRecorder] Using existing device settings')
+                    return
+                }
 
-        if (existingStream && hasValidDeviceSettings()) {
-            console.log('[VideoRecorder] Using pre-connected stream from device setup', {
-                streamId: existingStream.id,
-                active: existingStream.active,
-                videoTracks: existingStream.getVideoTracks().length,
-                audioTracks: existingStream.getAudioTracks().length
-            })
-            
-            // Create webcam ref immediately for persisted stream
-            if (!webcamRef.current) {
-                webcamRef.current = {
-                    stream: existingStream,
-                    video: null
-                } as WebcamRef
-            } else {
-                (webcamRef.current as any).stream = existingStream
+                // Auto-detect default devices
+                console.log('[VideoRecorder] Auto-detecting devices...')
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: true,
+                    audio: true
+                })
+
+                // Get device IDs
+                const videoTrack = stream.getVideoTracks()[0]
+                const audioTrack = stream.getAudioTracks()[0]
+                const cameraId = videoTrack?.getSettings().deviceId
+                const micId = audioTrack?.getSettings().deviceId
+
+                if (cameraId && micId) {
+                    console.log('[VideoRecorder] Auto-detected:', {
+                        camera: cameraId.substring(0, 8) + '...',
+                        mic: micId.substring(0, 8) + '...'
+                    })
+                    storeDeviceSettings(cameraId, micId)
+                }
+
+                // Stop the detection stream - react-webcam will create its own
+                stream.getTracks().forEach(t => t.stop())
+            } catch (error) {
+                console.error('[VideoRecorder] Auto-detect failed:', error)
+                logError(error, { context: 'VideoRecorder.init' })
+                toast.error('Failed to access camera/microphone. Please check permissions.')
+                setStatus('error')
             }
-            
-            // Set ready immediately - no delays needed since connection was already tested
-            setWebcamReady(true)
-            const initTime = performance.now() - startTime
-            console.log(`[VideoRecorder] Pre-connected stream ready in ${initTime.toFixed(2)}ms`)
-            return
         }
 
-        // Fallback: If somehow no stream is available, redirect back to device setup
-        console.warn('[VideoRecorder] No pre-connected stream found! Redirecting to device setup...')
-        window.location.href = `/interviews/job/${interviewId}/device-setup`
-    }, [interviewId])
+        init()
+    }, [logError])
 
-    // Set up webcam constraints
-    const audioConstraints = {
-        deviceId: getSelectedMicrophone() ? { exact: getSelectedMicrophone()! } : undefined
-    }
-
-    // Automatically start the preparation timer after component mounts and webcam is ready
+    // Start prep timer when webcam is ready
     useEffect(() => {
         if (status === 'idle' && webcamReady) {
-            console.log('[VideoRecorder] Webcam ready, starting prep timer immediately')
-            const startTime = performance.now()
-            
+            console.log('[VideoRecorder] Starting prep timer')
             startPrepTimer()
-            
-            const prepStartTime = performance.now() - startTime
-            console.log(`[VideoRecorder] Prep timer started in ${prepStartTime.toFixed(2)}ms`)
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [status, webcamReady])
 
-    // Start preparation timer
+    // Webcam event handlers
+    const handleWebcamReady = useCallback(() => {
+        console.log('[VideoRecorder] Webcam ready')
+
+        // Save the stream for session persistence
+        const stream = webcamRef.current?.stream
+        if (stream) {
+            setActiveMediaStream(stream)
+            console.log('[VideoRecorder] Stream saved:', {
+                streamId: stream.id,
+                videoTracks: stream.getVideoTracks().length,
+                audioTracks: stream.getAudioTracks().length
+            })
+        }
+
+        setWebcamReady(true)
+    }, [])
+
+    const handleWebcamError = useCallback((error: string | DOMException) => {
+        console.error('[VideoRecorder] Webcam error:', error)
+        logError(error, { context: 'VideoRecorder.webcam' })
+        toast.error('Failed to access camera or microphone')
+        setStatus('error')
+    }, [logError])
+
+    // Device modal handlers
+    const handleOpenSettings = useCallback(() => {
+        setShowDeviceModal(true)
+    }, [])
+
+    const handleDeviceChange = useCallback(() => {
+        setShowDeviceModal(false)
+
+        // Force webcam to remount with new devices
+        setWebcamKey(prev => prev + 1)
+        setWebcamReady(false)
+
+        toast.success('Devices updated')
+    }, [])
+
+    // Timer functions
     const startPrepTimer = () => {
         setStatus('preparing')
         setPrepTimeRemaining(prepTime)
@@ -145,7 +185,6 @@ export default function VideoRecorder({
         }, 1000)
     }
 
-    // Start the 3-2-1 countdown before recording
     const startCountdown = () => {
         setStatus('countdown')
         setCountdown(3)
@@ -157,7 +196,7 @@ export default function VideoRecorder({
                 const newCount = prev - 1
                 if (newCount <= 0) {
                     if (countdownTimerRef.current) clearInterval(countdownTimerRef.current)
-                    initializeRecording()
+                    startRecording()
                     return 0
                 }
                 return newCount
@@ -165,30 +204,23 @@ export default function VideoRecorder({
         }, 1000)
     }
 
-    // Initialize recording after countdown
-    const initializeRecording = useCallback(() => {
-        if (audioStreamRef.current) {
-            audioStreamRef.current = null
-        }
+    const startRecording = useCallback(() => {
         setStatus('recording')
         setRecordTimeRemaining(maxResponseTime)
         setRecordProgress(0)
         chunksRef.current = []
 
-        if (!webcamRef.current?.stream) {
-            toast.error('Microphone access is required to record')
+        const stream = webcamRef.current?.stream
+        if (!stream) {
+            toast.error('Camera not ready')
             setStatus('error')
             return
         }
 
         try {
-            // Get the stream from webcam
-            const stream = webcamRef.current.stream
-            audioStreamRef.current = stream
-
-            // Create and configure the MediaRecorder
-            const options = { mimeType: 'video/webm;codecs=vp9,opus' }
-            const recorder = new MediaRecorder(stream, options)
+            const recorder = new MediaRecorder(stream, {
+                mimeType: 'video/webm;codecs=vp9,opus'
+            })
 
             recorder.ondataavailable = (e) => {
                 if (e.data && e.data.size > 0) {
@@ -199,16 +231,14 @@ export default function VideoRecorder({
             recorder.onstop = () => {
                 const blob = new Blob(chunksRef.current, { type: 'video/webm' })
                 setRecordedBlob(blob)
-                const videoURL = URL.createObjectURL(blob)
-                setRecordedVideoURL(videoURL)
+                setRecordedVideoURL(URL.createObjectURL(blob))
                 setStatus('reviewing')
             }
 
-            // Start recording
             mediaRecorderRef.current = recorder
             recorder.start()
 
-            // Set up the recording timer
+            // Start timer
             if (recordTimerRef.current) clearInterval(recordTimerRef.current)
 
             recordTimerRef.current = setInterval(() => {
@@ -223,179 +253,68 @@ export default function VideoRecorder({
                     return newTime
                 })
             }, 1000)
-
-            // Begin monitoring audio levels
-            setupAudioAnalysis(stream)
-
         } catch (error) {
-            logError(error, {
-                context: 'VideoRecorder.initializeRecording',
-                interviewId,
-                questionId
-            })
+            logError(error, { context: 'VideoRecorder.startRecording' })
+            toast.error('Failed to start recording')
             setStatus('error')
-            toast.error('Failed to start recording. Please check your camera permissions.')
         }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [interviewId, questionId, logError, maxResponseTime])
+    }, [maxResponseTime, logError])
 
-    // Function to set up audio analysis for visualizing audio levels
-    const setupAudioAnalysis = (stream: MediaStream) => {
-        try {
-            // Create audio context if it doesn't exist
-            if (!audioContextRef.current) {
-                audioContextRef.current = new AudioContext()
-            }
-
-            const audioContext = audioContextRef.current
-
-            // Create a media stream source
-            const source = audioContext.createMediaStreamSource(stream)
-            const analyser = audioContext.createAnalyser()
-            analyser.fftSize = 256
-            source.connect(analyser)
-
-            audioAnalyserRef.current = analyser
-            audioDataRef.current = new Uint8Array(analyser.frequencyBinCount)
-
-            const updateAudioLevel = () => {
-                if (!audioAnalyserRef.current || !audioDataRef.current) return
-
-                audioAnalyserRef.current.getByteFrequencyData(audioDataRef.current)
-                let sum = 0
-                for (let i = 0; i < audioDataRef.current.length; i++) {
-                    sum += audioDataRef.current[i]
-                }
-                const average = sum / audioDataRef.current.length
-                const normalizedLevel = Math.min(100, Math.max(0, average * 2))
-                // setAudioLevel(normalizedLevel) // Removed for now as audio level indicator is disabled
-
-                animationFrameRef.current = requestAnimationFrame(updateAudioLevel)
-            }
-
-            updateAudioLevel()
-        } catch (error) {
-            logError(error, {
-                context: 'VideoRecorder.setupAudioAnalysis',
-                interviewId
-            })
-            console.error('Error setting up audio analysis:', error)
-        }
-    }
-
-    // Function to stop recording
     const stopRecording = () => {
         if (recordTimerRef.current) clearInterval(recordTimerRef.current)
-
         if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
             mediaRecorderRef.current.stop()
-            // Note: 'onstop' handler will set the status to 'reviewing'
         } else {
             setStatus('reviewing')
         }
-
-        // Clean up audio monitoring
-        if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current)
     }
 
-    // Function to retry recording
     const retryRecording = () => {
         const MAX_REDOS = 3
-
         if (redoAttempts >= MAX_REDOS) {
-            toast.error(`Maximum number of retries (${MAX_REDOS}) reached. Please submit your current response.`)
+            toast.error(`Maximum retries (${MAX_REDOS}) reached`)
             return
         }
 
         setRedoAttempts(prev => prev + 1)
 
-        try {
-            // Release old recording URL
-            if (recordedVideoURL) {
-                URL.revokeObjectURL(recordedVideoURL)
-                setRecordedVideoURL(null)
-            }
-
-            // Clear recording data
-            setRecordedBlob(null)
-            chunksRef.current = []
-
-            // Stop any existing recording
-            if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
-                mediaRecorderRef.current.stop()
-            }
-            mediaRecorderRef.current = null
-
-            if (webcamRef.current?.stream) {
-                const stream = webcamRef.current.stream;
-                if (stream instanceof MediaStream) {
-                    stream.getTracks().forEach(track => track.stop());
-                }
-            }
-
-            // Clear any existing timers
-            if (prepTimerRef.current) {
-                clearInterval(prepTimerRef.current)
-                prepTimerRef.current = null
-            }
-            if (recordTimerRef.current) {
-                clearInterval(recordTimerRef.current)
-                recordTimerRef.current = null
-            }
-            if (countdownTimerRef.current) {
-                clearInterval(countdownTimerRef.current)
-                countdownTimerRef.current = null
-            }
-
-            // Clean up audio monitoring
-            if (animationFrameRef.current) {
-                cancelAnimationFrame(animationFrameRef.current)
-                animationFrameRef.current = null
-            }
-
-            // Reset audio context if needed
-            if (audioAnalyserRef.current) {
-                audioAnalyserRef.current = null
-            }
-
-            // Force webcam to reinitialize by updating the key
-            setWebcamKey(prev => prev + 1)
-            setWebcamReady(false)
-
-            // Force a small delay before starting countdown
-            // This helps ensure the webcam and audio contexts have time to reset
-            setTimeout(() => {
-                startCountdown()
-            }, 500)
-        } catch (error) {
-            console.error('Error in retry recording:', error)
-            setStatus('error')
-            toast.error('Error restarting recording. Please refresh the page and try again.')
+        // Cleanup
+        if (recordedVideoURL) {
+            URL.revokeObjectURL(recordedVideoURL)
+            setRecordedVideoURL(null)
         }
+        setRecordedBlob(null)
+        chunksRef.current = []
+
+        if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+            mediaRecorderRef.current.stop()
+        }
+        mediaRecorderRef.current = null
+
+        // Clear timers
+        if (prepTimerRef.current) clearInterval(prepTimerRef.current)
+        if (recordTimerRef.current) clearInterval(recordTimerRef.current)
+        if (countdownTimerRef.current) clearInterval(countdownTimerRef.current)
+
+        // Restart countdown
+        setTimeout(() => startCountdown(), 500)
     }
 
-    // Function to submit the recording
     const submitRecording = async () => {
         if (!recordedBlob) {
-            toast.error('No recording available to submit')
+            toast.error('No recording available')
             return
         }
 
         setStatus('submitting')
 
         try {
-            // Ensure we're using the correct interview ID for submission
-            if (!interviewId) {
-                throw new Error('Missing interview ID for submission')
-            }
-
             const formData = new FormData()
             formData.append('videoResponse', recordedBlob, 'answer.webm')
-            const recordedDuration = Math.min(maxResponseTime, maxResponseTime - recordTimeRemaining)
-            formData.append('responseTimeMs', (recordedDuration * 1000).toString())
+            const duration = Math.min(maxResponseTime, maxResponseTime - recordTimeRemaining)
+            formData.append('responseTimeMs', (duration * 1000).toString())
             formData.append('redoAttemptNumber', redoAttempts.toString())
 
-            // Use the interviewId from props
             const response = await fetch(
                 `/api/interviews/${interviewId}/questions/${questionId}/response`,
                 {
@@ -406,343 +325,224 @@ export default function VideoRecorder({
 
             if (!response.ok) {
                 const errorData = await response.json().catch(() => ({}))
-                throw new Error(`Server responded with status: ${response.status}. ${errorData?.error?.message || ''}`)
+                throw new Error(`Server error: ${response.status}. ${errorData?.error?.message || ''}`)
             }
 
-            toast.success('Response submitted successfully!')
+            toast.success('Response submitted!')
             router.push(`/interviews/job/${interviewId}`)
         } catch (error) {
-            logError(error, {
-                context: 'VideoRecorder.submitRecording',
-                interviewId,
-                questionId
-            })
+            logError(error, { context: 'VideoRecorder.submitRecording' })
             setStatus('reviewing')
-            toast.error('Failed to submit your response. Please try again.')
+            toast.error('Failed to submit. Please try again.')
         }
     }
 
-    // Format time as MM:SS
+    // Cleanup on unmount
+    useEffect(() => {
+        return () => {
+            if (prepTimerRef.current) clearInterval(prepTimerRef.current)
+            if (recordTimerRef.current) clearInterval(recordTimerRef.current)
+            if (countdownTimerRef.current) clearInterval(countdownTimerRef.current)
+            if (recordedVideoURL) URL.revokeObjectURL(recordedVideoURL)
+        }
+    }, [recordedVideoURL])
+
     const formatTime = (seconds: number) => {
         const mins = Math.floor(seconds / 60)
         const secs = seconds % 60
         return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`
     }
 
-    // Clean up on unmount
-    useEffect(() => {
-        return () => {
-            if (prepTimerRef.current) clearInterval(prepTimerRef.current)
-            if (recordTimerRef.current) clearInterval(recordTimerRef.current)
-            if (countdownTimerRef.current) clearInterval(countdownTimerRef.current)
-            if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current)
+    // Get current device constraints
+    const videoConstraints = getSelectedCamera()
+        ? { deviceId: { exact: getSelectedCamera()! }, width: 1280, height: 720 }
+        : { width: 1280, height: 720 }
 
-            if (audioContextRef.current) {
-                audioContextRef.current.close().catch(e => console.error("Error closing AudioContext:", e))
-                audioContextRef.current = null
-            }
+    const audioConstraints = getSelectedMicrophone()
+        ? { deviceId: { exact: getSelectedMicrophone()! } }
+        : true
 
-            if (recordedVideoURL) {
-                URL.revokeObjectURL(recordedVideoURL)
-            }
-        }
-    }, [recordedVideoURL])
+    return (
+        <>
+            <DeviceSetupModal
+                open={showDeviceModal}
+                onComplete={handleDeviceChange}
+            />
 
-    // Render timer and progress bar
-    const renderTimerAndProgress = () => {
-        let displayTime = ''
-        let progressValue = 0
-        let timerLabel = 'Ready to Begin'
-
-        if (status === 'preparing') {
-            timerLabel = 'Preparation Time'
-            displayTime = formatTime(prepTimeRemaining)
-            progressValue = prepProgress
-        } else if (status === 'countdown') {
-            timerLabel = 'Get Ready'
-            displayTime = `${countdown}`
-            progressValue = 0
-        } else if (status === 'recording') {
-            timerLabel = 'Recording Time'
-            displayTime = formatTime(recordTimeRemaining)
-            progressValue = recordProgress
-        } else if (status === 'reviewing' || status === 'submitting') {
-            timerLabel = 'Recording Complete'
-        } else if (status === 'error') {
-            timerLabel = 'Error Occurred'
-        }
-
-        return (
-            <div className="mb-6">
-                <div className="flex justify-between items-center mb-2">
-                    <div className="text-sm font-medium">{timerLabel}</div>
-                    <div className="text-sm font-bold" data-testid="time-display">
-                        {displayTime}
+            <div className="flex flex-col h-full p-6" data-testid="video-recorder">
+                {/* Timer Header */}
+                <div className="mb-6">
+                    <div className="flex justify-between items-center mb-2">
+                        <div className="text-sm font-medium">
+                            {status === 'preparing' && 'Preparation Time'}
+                            {status === 'countdown' && 'Get Ready'}
+                            {status === 'recording' && 'Recording Time'}
+                            {status === 'reviewing' && 'Recording Complete'}
+                            {status === 'submitting' && 'Submitting...'}
+                            {status === 'error' && 'Error'}
+                            {status === 'idle' && 'Ready to Begin'}
+                        </div>
+                        <div className="flex items-center gap-3">
+                            <div className="text-sm font-bold" data-testid="time-display">
+                                {status === 'preparing' && formatTime(prepTimeRemaining)}
+                                {status === 'countdown' && countdown}
+                                {status === 'recording' && formatTime(recordTimeRemaining)}
+                            </div>
+                            {(status === 'preparing' || status === 'recording' || status === 'idle') && (
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={handleOpenSettings}
+                                    className="h-7 w-7 p-0"
+                                    data-testid="device-settings-button"
+                                    title="Change camera or microphone"
+                                >
+                                    <Settings className="h-4 w-4" />
+                                </Button>
+                            )}
+                        </div>
                     </div>
+                    {(status === 'preparing' || status === 'recording') && (
+                        <Progress
+                            value={status === 'preparing' ? prepProgress : recordProgress}
+                            className="h-2"
+                        />
+                    )}
                 </div>
-                {(status === 'preparing' || status === 'recording') && (
-                    <Progress value={progressValue} className="h-2" aria-label="Time progress" />
-                )}
-            </div>
-        )
-    }
 
-    // Render the video display area
-    const renderVideoArea = () => {
-        // Show recorded video in review mode
-        if ((status === 'reviewing' || status === 'submitting') && recordedVideoURL) {
-            return (
-                <video
-                    src={recordedVideoURL}
-                    controls
-                    className="w-full h-full object-contain bg-black"
-                    data-testid="review-video"
-                />
-            )
-        }
-
-        // Show error state
-        if (status === 'error') {
-            return (
-                <div className="flex flex-col items-center justify-center h-full text-center p-4">
-                    <VideoOff className="h-16 w-16 text-destructive mb-4" />
-                    <p className="font-semibold text-destructive">Recording Error</p>
-                    <p className="text-sm text-muted-foreground">
-                        An error occurred with the camera or microphone. Please check your permissions and try again.
-                    </p>
-                    <Button variant="outline" onClick={retryRecording} className="mt-4">Try Again</Button>
-                </div>
-            )
-        }
-
-        // Show webcam or placeholder based on showFace
-        return (
-            <>
-                <div className="relative w-full h-full bg-black">
-                    {/* Check for existing stream first, then render Webcam component */}
-                    {(() => {
-                        const existingStream = getActiveMediaStream()
-
-                        if (existingStream && hasValidDeviceSettings()) {
-                            // Use existing stream with a video element
-                            return (
-                                <video
-                                    ref={(video) => {
-                                        if (video && existingStream) {
-                                            video.srcObject = existingStream
-                                            video.play().catch(console.error)
-                                            // Create a mock webcam ref object for compatibility with recording logic
-                                            if (!webcamRef.current) {
-                                                webcamRef.current = {
-                                                    stream: existingStream,
-                                                    video: video
-                                                } as WebcamRef
-                                            } else {
-                                                (webcamRef.current as any).stream = existingStream
-                                            }
-                                            // Mark webcam as ready since we have a working stream
-                                            setWebcamReady(true)
-                                        }
-                                    }}
-                                    muted={true}
-                                    autoPlay
-                                    playsInline
-                                    className={showFace ? "w-full h-full object-cover" : "w-full h-full object-cover opacity-0 absolute"}
-                                    data-testid="webcam-video"
-                                />
-                            )
-                        }
-
-                        // Fallback to Webcam component for new streams
-                        return videoConstraints && (
+                {/* Video Area */}
+                <div className="flex-1 flex flex-col items-center justify-center bg-muted rounded-lg overflow-hidden relative mb-4">
+                    {(status === 'reviewing' || status === 'submitting') && recordedVideoURL ? (
+                        // Show recorded video
+                        <video
+                            src={recordedVideoURL}
+                            controls
+                            className="w-full h-full object-contain bg-black"
+                            data-testid="review-video"
+                        />
+                    ) : status === 'error' ? (
+                        // Show error
+                        <div className="flex flex-col items-center justify-center h-full text-center p-4">
+                            <VideoOff className="h-16 w-16 text-destructive mb-4" />
+                            <p className="font-semibold text-destructive">Recording Error</p>
+                            <p className="text-sm text-muted-foreground">
+                                Check your camera/microphone permissions and try again.
+                            </p>
+                            <Button variant="outline" onClick={retryRecording} className="mt-4">
+                                Try Again
+                            </Button>
+                        </div>
+                    ) : (
+                        // Show webcam
+                        <div className="relative w-full h-full bg-black">
                             <Webcam
                                 key={webcamKey}
-                                audio={true}
-                                audioConstraints={audioConstraints}
                                 ref={webcamRef}
+                                audio={true}
                                 videoConstraints={videoConstraints}
-                                muted={true}
-                                className={showFace ? "w-full h-full object-cover" : "w-full h-full object-cover opacity-0 absolute"}
+                                audioConstraints={audioConstraints}
+                                muted
+                                className={
+                                    showFace
+                                        ? "w-full h-full object-cover"
+                                        : "w-full h-full object-cover opacity-0 absolute"
+                                }
                                 data-testid="webcam-video"
-                                onUserMedia={() => {
-                                    console.log('Webcam ready - user media obtained')
-                                    setWebcamReady(true)
-                                }}
-                                onUserMediaError={(error) => {
-                                    logError(error, {
-                                        context: 'VideoRecorder.webcam',
-                                        interviewId
-                                    })
-                                    setStatus('error')
-                                    setWebcamReady(false)
-                                    toast.error('Failed to access camera or microphone')
-                                }}
+                                onUserMedia={handleWebcamReady}
+                                onUserMediaError={handleWebcamError}
                             />
-                        )
-                    })()}
 
-                    {/* Show loading state when videoConstraints is not yet set or webcam not ready */}
-                    {(() => {
-                        const existingStream = getActiveMediaStream()
-                        const hasExistingStream = existingStream && hasValidDeviceSettings()
-
-                        // Don't show loading if we have an existing stream and webcam is ready
-                        if (hasExistingStream && webcamReady) {
-                            console.log('[VideoRecorder] Skipping loading - using persisted stream')
-                            return null
-                        }
-
-                        // Show loading only when actually waiting for camera access
-                        if (!webcamReady) {
-                            const loadingMessage = hasExistingStream 
-                                ? 'Connecting to your selected camera...'
-                                : !videoConstraints
-                                    ? 'Initializing camera...'
-                                    : hasValidDeviceSettings()
-                                        ? 'Connecting to your selected camera...'
-                                        : 'Connecting to camera...'
-
-                            return (
-                                <div className="absolute inset-0 flex items-center justify-center">
+                            {!webcamReady && (
+                                <div className="absolute inset-0 flex items-center justify-center bg-black/50">
                                     <div className="text-center p-4 bg-background/80 rounded-lg">
-                                        <Loader2 className="h-16 w-16 mx-auto text-muted-foreground animate-spin" />
-                                        <p className="mt-2 text-muted-foreground">
-                                            {loadingMessage}
-                                        </p>
+                                        <Loader2 className="h-12 w-12 mx-auto text-muted-foreground animate-spin mb-2" />
+                                        <p className="text-muted-foreground">Connecting...</p>
                                     </div>
                                 </div>
-                            )
-                        }
+                            )}
 
-                        return null
-                    })()}
+                            {!showFace && webcamReady && (
+                                <div className="absolute inset-0 flex items-center justify-center bg-black/50">
+                                    <div className="text-center p-4 bg-background/80 rounded-lg">
+                                        <Camera className="h-12 w-12 mx-auto text-muted-foreground mb-2" />
+                                        <p className="text-muted-foreground">Camera active (preview hidden)</p>
+                                    </div>
+                                </div>
+                            )}
 
-                    {/* Show placeholder overlay when camera preview is hidden */}
-                    {!showFace && (videoConstraints || (getActiveMediaStream() && hasValidDeviceSettings())) && (
-                        <div className="absolute inset-0 flex items-center justify-center">
-                            <div className="text-center p-4 bg-background/80 rounded-lg">
-                                <Camera className="h-16 w-16 mx-auto text-muted-foreground" />
-                                <p className="mt-2 text-muted-foreground">
-                                    Camera is active but preview is hidden
-                                </p>
-                            </div>
+                            {status === 'countdown' && (
+                                <div className="absolute inset-0 flex items-center justify-center bg-black/50">
+                                    <div className="text-9xl font-bold text-white animate-pulse" data-testid="countdown-overlay">
+                                        {countdown}
+                                    </div>
+                                </div>
+                            )}
+
+                            {status === 'recording' && (
+                                <div className="absolute top-4 right-4 flex items-center gap-2 bg-red-500/90 px-3 py-1 rounded-full">
+                                    <div className="h-3 w-3 rounded-full bg-white animate-pulse" />
+                                    <span className="text-sm font-medium text-white">REC</span>
+                                </div>
+                            )}
                         </div>
                     )}
+                </div>
 
-                    {/* Countdown overlay */}
+                {/* Controls */}
+                <div className="flex gap-4 justify-center">
+                    {status === 'preparing' && (
+                        <Button
+                            variant="outline"
+                            onClick={() => {
+                                if (prepTimerRef.current) clearInterval(prepTimerRef.current)
+                                startCountdown()
+                            }}
+                            data-testid="skip-prep-button"
+                        >
+                            Skip Preparation ({prepTimeRemaining}s)
+                        </Button>
+                    )}
+
                     {status === 'countdown' && (
-                        <div className="absolute inset-0 flex items-center justify-center bg-black/50">
-                            <div className="text-9xl font-bold text-white animate-pulse" data-testid="countdown-overlay">
+                        <div className="flex items-center justify-center">
+                            <div className="text-5xl font-bold text-primary animate-pulse" data-testid="countdown-display">
                                 {countdown}
                             </div>
                         </div>
                     )}
+
+                    {status === 'recording' && (
+                        <Button onClick={stopRecording} variant="destructive" data-testid="stop-recording-button">
+                            Stop Recording
+                        </Button>
+                    )}
+
+                    {status === 'reviewing' && (
+                        <>
+                            <Button
+                                variant="outline"
+                                onClick={retryRecording}
+                                disabled={redoAttempts >= 3}
+                                data-testid="retry-button"
+                            >
+                                {redoAttempts < 3
+                                    ? `Record Again (${3 - redoAttempts} left)`
+                                    : 'Max retries reached'}
+                            </Button>
+                            <Button onClick={submitRecording} data-testid="submit-button">
+                                Submit Response
+                            </Button>
+                        </>
+                    )}
+
+                    {status === 'submitting' && (
+                        <Button size="lg" disabled>
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                            Submitting...
+                        </Button>
+                    )}
                 </div>
-
-                {status === 'recording' && (
-                    <div className="absolute top-4 right-4 flex items-center gap-2 bg-background/80 px-3 py-1 rounded-full">
-                        <div className="h-3 w-3 rounded-full bg-red-500 animate-pulse"></div>
-                        <span className="text-sm font-medium">Recording</span>
-                    </div>
-                )}
-            </>
-        )
-    }
-
-    // Render audio level indicator
-    // const renderAudioIndicator = () => {
-    //     if (status !== 'recording') return null
-
-    //     return (
-    //         <div className="mt-4">
-    //             <div className="flex items-center gap-2 mb-1">
-    //                 <Mic className="h-4 w-4 text-muted-foreground" />
-    //                 <span className="text-sm text-muted-foreground">Microphone Level</span>
-    //             </div>
-    //             <div className="h-2 bg-muted rounded-full overflow-hidden">
-    //                 <div
-    //                     className="h-full bg-green-500 transition-all duration-100"
-    //                     style={{ width: `${audioLevel}%` }}
-    //                 ></div>
-    //             </div>
-    //         </div>
-    //     )
-    // }
-
-    // Render control buttons
-    const renderControls = () => {
-        switch (status) {
-            case 'preparing':
-                return (
-                    <Button variant="outline" onClick={() => {
-                        if (prepTimerRef.current) clearInterval(prepTimerRef.current)
-                        startCountdown()
-                    }} data-testid="skip-prep-button">
-                        Skip Preparation ({prepTimeRemaining}s)
-                    </Button>
-                )
-            case 'countdown':
-                return (
-                    <div className="flex items-center justify-center">
-                        <div className="text-5xl font-bold text-primary animate-pulse" data-testid="countdown-display">
-                            {countdown}
-                        </div>
-                    </div>
-                )
-            case 'recording':
-                return (
-                    <Button onClick={stopRecording} variant="destructive" data-testid="stop-recording-button">
-                        Stop Recording
-                    </Button>
-                )
-            case 'reviewing':
-                const MAX_REDOS = 3
-                const remainingRedos = MAX_REDOS - redoAttempts
-                const canRetry = redoAttempts < MAX_REDOS
-
-                return (
-                    <>
-                        <Button
-                            variant="outline"
-                            onClick={retryRecording}
-                            disabled={!canRetry}
-                            data-testid="retry-button"
-                        >
-                            {canRetry ? `Record Again (${remainingRedos} left)` : 'Max retries reached'}
-                        </Button>
-                        <Button onClick={submitRecording} data-testid="submit-button">
-                            Submit Response
-                        </Button>
-                    </>
-                )
-            case 'submitting':
-                return (
-                    <Button size="lg" disabled>
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                        Submitting...
-                    </Button>
-                )
-            default:
-                return null
-        }
-    }
-
-    // Log information about the current props for debugging
-    useEffect(() => {
-        console.log('VideoRecorder props:', { interviewId, questionId, showFace, prepTime, maxResponseTime });
-    }, [interviewId, questionId, showFace, prepTime, maxResponseTime]);
-
-    return (
-        <div className="flex flex-col h-full p-6" data-testid="video-recorder">
-            {renderTimerAndProgress()}
-
-            <div className="flex-1 flex flex-col items-center justify-center bg-muted rounded-lg overflow-hidden relative mb-4">
-                {renderVideoArea()}
             </div>
-
-            <div className="mt-6 flex gap-4 justify-center">
-                {renderControls()}
-            </div>
-        </div>
+        </>
     )
 }
