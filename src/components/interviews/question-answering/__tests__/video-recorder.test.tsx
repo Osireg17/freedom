@@ -224,3 +224,103 @@ test('retryRecording enforces MAX_REDOS limit and disables button after third re
     fireEvent.click(retryBtnFinal)
     expect(toastError).not.toHaveBeenCalled() // guard: function not entered due to disabled
 })
+
+// Mock DeviceSetupModal
+jest.mock('@/components/interviews/device/device-setup-modal', () => {
+    return function DeviceSetupModal({ open, onComplete }: { open: boolean; onComplete: () => void }) {
+        return open ? (
+            <div data-testid="device-setup-modal">
+                <button data-testid="complete-setup-button" onClick={onComplete}>
+                    Complete Setup
+                </button>
+            </div>
+        ) : null
+    }
+})
+
+describe('Device Setup Modal Integration', () => {
+    test('shows modal when no valid device session exists', async () => {
+        mockHasValidDeviceSettings.mockReturnValue(false)
+        mockGetActiveMediaStream.mockReturnValue(null)
+
+        render(
+            <VideoRecorder
+                interviewId="test-interview"
+                questionId="test-question"
+                showFace={true}
+                prepTime={30}
+                maxResponseTime={120}
+            />
+        )
+
+        // Modal should be shown
+        await waitFor(() => {
+            expect(screen.getByTestId('device-setup-modal')).toBeInTheDocument()
+        })
+    })
+
+    test('does not show modal when valid device session exists', async () => {
+        const mockStream = new MockMediaStream()
+        mockHasValidDeviceSettings.mockReturnValue(true)
+        mockGetActiveMediaStream.mockReturnValue(mockStream as any)
+
+        render(
+            <VideoRecorder
+                interviewId="test-interview"
+                questionId="test-question"
+                showFace={true}
+                prepTime={30}
+                maxResponseTime={120}
+            />
+        )
+
+        // Modal should NOT be shown
+        await waitFor(() => {
+            expect(screen.queryByTestId('device-setup-modal')).not.toBeInTheDocument()
+        })
+
+        // Video recorder should be ready
+        expect(screen.getByTestId('video-recorder')).toBeInTheDocument()
+    })
+
+    test('starts prep timer after modal completes', async () => {
+        mockHasValidDeviceSettings.mockReturnValue(false)
+        mockGetActiveMediaStream.mockReturnValue(null)
+
+        render(
+            <VideoRecorder
+                interviewId="test-interview"
+                questionId="test-question"
+                showFace={true}
+                prepTime={30}
+                maxResponseTime={120}
+            />
+        )
+
+        // Modal shown initially
+        await waitFor(() => {
+            expect(screen.getByTestId('device-setup-modal')).toBeInTheDocument()
+        })
+
+        // Simulate completing device setup
+        const mockStreamAfterSetup = new MockMediaStream()
+        mockGetActiveMediaStream.mockReturnValue(mockStreamAfterSetup as any)
+        mockHasValidDeviceSettings.mockReturnValue(true)
+
+        // Click complete setup button
+        const completeButton = screen.getByTestId('complete-setup-button')
+        await act(async () => {
+            fireEvent.click(completeButton)
+        })
+
+        // Modal should close
+        await waitFor(() => {
+            expect(screen.queryByTestId('device-setup-modal')).not.toBeInTheDocument()
+        })
+
+        // Prep timer should start (indicated by "Preparation Time" text)
+        await waitFor(() => {
+            expect(screen.getByText('Preparation Time')).toBeInTheDocument()
+        })
+    })
+})

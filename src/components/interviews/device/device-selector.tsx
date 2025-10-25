@@ -13,6 +13,7 @@ import { storeDeviceSettings, setActiveMediaStream } from '@/lib/device-session'
 
 interface DeviceSelectorProps {
     interviewId: string
+    questionId?: string // Optional - will fetch first question if not provided
 }
 
 export default function DeviceSelector({ interviewId }: DeviceSelectorProps) {
@@ -150,7 +151,9 @@ export default function DeviceSelector({ interviewId }: DeviceSelectorProps) {
         const setupTime = performance.now() - startTime
         console.log(`[DeviceSelector] Device setup completed in ${setupTime.toFixed(2)}ms`)
 
-        router.push(`/interviews/job/${interviewId}/device-setup/connect`)
+        // Navigate back to interview page after device setup
+        // User can select which question to start
+        router.push(`/interviews/job/${interviewId}`)
     }
 
     return (
