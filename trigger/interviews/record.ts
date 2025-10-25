@@ -108,72 +108,50 @@ export const recordInterviewTask = schemaTask({
       });
 
       // 4. Run STAR analysis using the task directly
-      let starAnalysisResult = null;
-      let overallScore = null;
-      const errors: string[] = [];
+      const taskResult = await analyseSTARTask.triggerAndWait({
+        transcription: transcript,
+        questionText: question.questionText,
+        questionType: question.questionType,
+        userTier: userTier,
+        answerId: payload.responseId,
+      });
 
-      try {
-        const taskResult = await analyseSTARTask.triggerAndWait({
-          transcription: transcript,
-          questionText: question.questionText,
-          questionType: question.questionType,
-          userTier: userTier,
-          answerId: payload.responseId,
-        });
-
-        if (taskResult.ok) {
-          starAnalysisResult = taskResult.output;
-          overallScore = taskResult.output.overallScore;
-
-          logger.info("STAR analysis successful", {
-            responseId: payload.responseId,
-            overallScore: taskResult.output.overallScore,
-            starCompleteness: taskResult.output.starCompleteness,
-          });
-
-          // 5. Update database with transcription and analysis results
-          await db.update(interviewAnswers)
-            .set({
-              transcription: transcript,
-              overallScore: overallScore,
-              starScores: starAnalysisResult,
-              evaluation: starAnalysisResult.evaluation,
-              analyzedAt: new Date(),
-              updatedAt: new Date(),
-              audioUrl: payload.audioPath
-            })
-            .where(eq(interviewAnswers.id, payload.responseId));
-
-          logger.info('Database updated with transcription and analysis', {
-            responseId: payload.responseId,
-            overallScore,
-          });
-
-        } else {
-          throw new Error(`Task failed: ${taskResult.error}`);
-        }
-
-      } catch (analysisError) {
-        const errorMsg = `STAR analysis failed: ${analysisError instanceof Error ? analysisError.message : 'Unknown error'}`;
-        errors.push(errorMsg);
-        logger.error("STAR analysis failed", {
-          error: analysisError instanceof Error ? analysisError.message : 'Unknown error',
+      // Check if analysis succeeded
+      if (!taskResult.ok) {
+        logger.error("STAR analysis task failed", {
+          error: taskResult.error,
           responseId: payload.responseId,
+          questionId: payload.questionId,
         });
-
-        // If analysis fails, only store transcription without scores
-        await db.update(interviewAnswers)
-          .set({
-            transcription: transcript,
-            updatedAt: new Date(),
-            audioUrl: payload.audioPath
-          })
-          .where(eq(interviewAnswers.id, payload.responseId));
-
-        logger.info('Database updated with transcription only (analysis failed)', {
-          responseId: payload.responseId,
-        });
+        throw new Error(`STAR analysis failed: ${taskResult.error}`);
       }
+
+      const starAnalysisResult = taskResult.output;
+      const overallScore = taskResult.output.overallScore;
+
+      logger.info("STAR analysis successful", {
+        responseId: payload.responseId,
+        overallScore: taskResult.output.overallScore,
+        starCompleteness: taskResult.output.starCompleteness,
+      });
+
+      // 5. Update database with transcription and analysis results
+      await db.update(interviewAnswers)
+        .set({
+          transcription: transcript,
+          overallScore: overallScore,
+          starScores: starAnalysisResult,
+          evaluation: starAnalysisResult.evaluation,
+          analyzedAt: new Date(),
+          updatedAt: new Date(),
+          audioUrl: payload.audioPath
+        })
+        .where(eq(interviewAnswers.id, payload.responseId));
+
+      logger.info('Database updated with transcription and analysis', {
+        responseId: payload.responseId,
+        overallScore,
+      });
 
       // 6. Delete audio file from storage
       const { error: deleteError } = await supabaseAdmin.storage
@@ -197,8 +175,6 @@ export const recordInterviewTask = schemaTask({
         analysis: {
           overallScore,
           starAnalysis: starAnalysisResult,
-          errors,
-          hasAnalysis: !!starAnalysisResult,
         },
       };
     } catch (error) {
