@@ -1,29 +1,29 @@
-'use client'
+'use client';
 
-import React, { useState, useRef, useEffect, useCallback } from 'react'
-import { useRouter } from 'next/navigation'
-import Webcam from 'react-webcam'
-import { Button } from '@/components/ui/button'
-import { Progress } from '@/components/ui/progress'
-import { useErrorLogging } from '@/hooks/use-error-logging'
-import { toast } from 'sonner'
-import { Camera, Loader2, VideoOff, Settings } from 'lucide-react'
+import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
+import Webcam from 'react-webcam';
+import { Button } from '@/components/ui/button';
+import { Progress } from '@/components/ui/progress';
+import { useErrorLogging } from '@/hooks/use-error-logging';
+import { toast } from 'sonner';
+import { Camera, Loader2, VideoOff, Settings } from 'lucide-react';
 import {
     hasValidDeviceSettings,
     getActiveMediaStream,
     storeDeviceSettings,
     setActiveMediaStream,
     getSelectedCamera,
-    getSelectedMicrophone
-} from '@/lib/device-session'
-import DeviceSetupModal from '@/components/interviews/device/device-setup-modal'
+    getSelectedMicrophone,
+} from '@/lib/device-session';
+import DeviceSetupModal from '@/components/interviews/device/device-setup-modal';
 
 interface VideoRecorderProps {
-    interviewId: string
-    questionId: string
-    showFace: boolean
-    prepTime: number
-    maxResponseTime: number
+    interviewId: string;
+    questionId: string;
+    showFace: boolean;
+    prepTime: number;
+    maxResponseTime: number;
 }
 
 type RecorderStatus =
@@ -33,41 +33,41 @@ type RecorderStatus =
     | 'recording'
     | 'reviewing'
     | 'submitting'
-    | 'error'
+    | 'error';
 
 export default function VideoRecorder({
     interviewId,
     questionId,
     showFace,
     prepTime,
-    maxResponseTime
+    maxResponseTime,
 }: VideoRecorderProps) {
-    const router = useRouter()
-    const { logError } = useErrorLogging()
+    const router = useRouter();
+    const { logError } = useErrorLogging();
 
     // Core state
-    const [status, setStatus] = useState<RecorderStatus>('idle')
-    const [prepTimeRemaining, setPrepTimeRemaining] = useState(prepTime)
-    const [recordTimeRemaining, setRecordTimeRemaining] = useState(maxResponseTime)
-    const [prepProgress, setPrepProgress] = useState(0)
-    const [recordProgress, setRecordProgress] = useState(0)
-    const [recordedBlob, setRecordedBlob] = useState<Blob | null>(null)
-    const [recordedVideoURL, setRecordedVideoURL] = useState<string | null>(null)
-    const [countdown, setCountdown] = useState(3)
-    const [redoAttempts, setRedoAttempts] = useState(0)
+    const [status, setStatus] = useState<RecorderStatus>('idle');
+    const [prepTimeRemaining, setPrepTimeRemaining] = useState(prepTime);
+    const [recordTimeRemaining, setRecordTimeRemaining] = useState(maxResponseTime);
+    const [prepProgress, setPrepProgress] = useState(0);
+    const [recordProgress, setRecordProgress] = useState(0);
+    const [recordedBlob, setRecordedBlob] = useState<Blob | null>(null);
+    const [recordedVideoURL, setRecordedVideoURL] = useState<string | null>(null);
+    const [countdown, setCountdown] = useState(3);
+    const [redoAttempts, setRedoAttempts] = useState(0);
 
     // Device state
-    const [webcamReady, setWebcamReady] = useState(false)
-    const [showDeviceModal, setShowDeviceModal] = useState(false)
-    const [webcamKey, setWebcamKey] = useState(0) // Force remount on device change
+    const [webcamReady, setWebcamReady] = useState(false);
+    const [showDeviceModal, setShowDeviceModal] = useState(false);
+    const [webcamKey, setWebcamKey] = useState(0); // Force remount on device change
 
     // Refs
-    const webcamRef = useRef<Webcam>(null)
-    const mediaRecorderRef = useRef<MediaRecorder | null>(null)
-    const chunksRef = useRef<BlobPart[]>([])
-    const prepTimerRef = useRef<NodeJS.Timeout | null>(null)
-    const recordTimerRef = useRef<NodeJS.Timeout | null>(null)
-    const countdownTimerRef = useRef<NodeJS.Timeout | null>(null)
+    const webcamRef = useRef<Webcam>(null);
+    const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+    const chunksRef = useRef<BlobPart[]>([]);
+    const prepTimerRef = useRef<NodeJS.Timeout | null>(null);
+    const recordTimerRef = useRef<NodeJS.Timeout | null>(null);
+    const countdownTimerRef = useRef<NodeJS.Timeout | null>(null);
 
     // Initialize devices on first load
     useEffect(() => {
@@ -75,299 +75,301 @@ export default function VideoRecorder({
             try {
                 // Check if we already have devices from session
                 if (hasValidDeviceSettings()) {
-                    console.log('[VideoRecorder] Using existing device settings')
-                    return
+                    console.log('[VideoRecorder] Using existing device settings');
+                    return;
                 }
 
                 // Auto-detect default devices
-                console.log('[VideoRecorder] Auto-detecting devices...')
+                console.log('[VideoRecorder] Auto-detecting devices...');
                 const stream = await navigator.mediaDevices.getUserMedia({
                     video: true,
-                    audio: true
-                })
+                    audio: true,
+                });
 
                 // Get device IDs
-                const videoTrack = stream.getVideoTracks()[0]
-                const audioTrack = stream.getAudioTracks()[0]
-                const cameraId = videoTrack?.getSettings().deviceId
-                const micId = audioTrack?.getSettings().deviceId
+                const videoTrack = stream.getVideoTracks()[0];
+                const audioTrack = stream.getAudioTracks()[0];
+                const cameraId = videoTrack?.getSettings().deviceId;
+                const micId = audioTrack?.getSettings().deviceId;
 
                 if (cameraId && micId) {
                     console.log('[VideoRecorder] Auto-detected:', {
                         camera: cameraId.substring(0, 8) + '...',
-                        mic: micId.substring(0, 8) + '...'
-                    })
-                    storeDeviceSettings(cameraId, micId)
+                        mic: micId.substring(0, 8) + '...',
+                    });
+                    storeDeviceSettings(cameraId, micId);
                 }
 
                 // Stop the detection stream - react-webcam will create its own
-                stream.getTracks().forEach(t => t.stop())
+                stream.getTracks().forEach((t) => t.stop());
             } catch (error) {
-                console.error('[VideoRecorder] Auto-detect failed:', error)
-                logError(error, { context: 'VideoRecorder.init' })
-                toast.error('Failed to access camera/microphone. Please check permissions.')
-                setStatus('error')
+                console.error('[VideoRecorder] Auto-detect failed:', error);
+                logError(error, { context: 'VideoRecorder.init' });
+                toast.error('Failed to access camera/microphone. Please check permissions.');
+                setStatus('error');
             }
-        }
+        };
 
-        init()
-    }, [logError])
+        init();
+    }, [logError]);
 
     // Start prep timer when webcam is ready
     useEffect(() => {
         if (status === 'idle' && webcamReady) {
-            console.log('[VideoRecorder] Starting prep timer')
-            startPrepTimer()
+            console.log('[VideoRecorder] Starting prep timer');
+            startPrepTimer();
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [status, webcamReady])
+    }, [status, webcamReady]);
 
     // Webcam event handlers
     const handleWebcamReady = useCallback(() => {
-        console.log('[VideoRecorder] Webcam ready')
+        console.log('[VideoRecorder] Webcam ready');
 
         // Save the stream for session persistence
-        const stream = webcamRef.current?.stream
+        const stream = webcamRef.current?.stream;
         if (stream) {
-            setActiveMediaStream(stream)
+            setActiveMediaStream(stream);
             console.log('[VideoRecorder] Stream saved:', {
                 streamId: stream.id,
                 videoTracks: stream.getVideoTracks().length,
-                audioTracks: stream.getAudioTracks().length
-            })
+                audioTracks: stream.getAudioTracks().length,
+            });
         }
 
-        setWebcamReady(true)
-    }, [])
+        setWebcamReady(true);
+    }, []);
 
-    const handleWebcamError = useCallback((error: string | DOMException) => {
-        console.error('[VideoRecorder] Webcam error:', error)
-        logError(error, { context: 'VideoRecorder.webcam' })
-        toast.error('Failed to access camera or microphone')
-        setStatus('error')
-    }, [logError])
+    const handleWebcamError = useCallback(
+        (error: string | DOMException) => {
+            console.error('[VideoRecorder] Webcam error:', error);
+            logError(error, { context: 'VideoRecorder.webcam' });
+            toast.error('Failed to access camera or microphone');
+            setStatus('error');
+        },
+        [logError]
+    );
 
     // Device modal handlers
     const handleOpenSettings = useCallback(() => {
-        setShowDeviceModal(true)
-    }, [])
+        setShowDeviceModal(true);
+    }, []);
 
     const handleDeviceChange = useCallback(() => {
-        setShowDeviceModal(false)
+        setShowDeviceModal(false);
 
         // Force webcam to remount with new devices
-        setWebcamKey(prev => prev + 1)
-        setWebcamReady(false)
+        setWebcamKey((prev) => prev + 1);
+        setWebcamReady(false);
 
-        toast.success('Devices updated')
-    }, [])
+        toast.success('Devices updated');
+    }, []);
 
     // Timer functions
     const startPrepTimer = () => {
-        setStatus('preparing')
-        setPrepTimeRemaining(prepTime)
-        setPrepProgress(0)
+        setStatus('preparing');
+        setPrepTimeRemaining(prepTime);
+        setPrepProgress(0);
 
-        if (prepTimerRef.current) clearInterval(prepTimerRef.current)
+        if (prepTimerRef.current) clearInterval(prepTimerRef.current);
 
         prepTimerRef.current = setInterval(() => {
-            setPrepTimeRemaining(prev => {
-                const newTime = prev - 1
-                setPrepProgress(((prepTime - newTime) / prepTime) * 100)
+            setPrepTimeRemaining((prev) => {
+                const newTime = prev - 1;
+                setPrepProgress(((prepTime - newTime) / prepTime) * 100);
 
                 if (newTime <= 0) {
-                    if (prepTimerRef.current) clearInterval(prepTimerRef.current)
-                    startCountdown()
-                    return 0
+                    if (prepTimerRef.current) clearInterval(prepTimerRef.current);
+                    startCountdown();
+                    return 0;
                 }
-                return newTime
-            })
-        }, 1000)
-    }
+                return newTime;
+            });
+        }, 1000);
+    };
 
     const startCountdown = () => {
-        setStatus('countdown')
-        setCountdown(3)
+        setStatus('countdown');
+        setCountdown(3);
 
-        if (countdownTimerRef.current) clearInterval(countdownTimerRef.current)
+        if (countdownTimerRef.current) clearInterval(countdownTimerRef.current);
 
         countdownTimerRef.current = setInterval(() => {
-            setCountdown(prev => {
-                const newCount = prev - 1
+            setCountdown((prev) => {
+                const newCount = prev - 1;
                 if (newCount <= 0) {
-                    if (countdownTimerRef.current) clearInterval(countdownTimerRef.current)
-                    startRecording()
-                    return 0
+                    if (countdownTimerRef.current) clearInterval(countdownTimerRef.current);
+                    startRecording();
+                    return 0;
                 }
-                return newCount
-            })
-        }, 1000)
-    }
+                return newCount;
+            });
+        }, 1000);
+    };
 
     const startRecording = useCallback(() => {
-        setStatus('recording')
-        setRecordTimeRemaining(maxResponseTime)
-        setRecordProgress(0)
-        chunksRef.current = []
+        setStatus('recording');
+        setRecordTimeRemaining(maxResponseTime);
+        setRecordProgress(0);
+        chunksRef.current = [];
 
-        const stream = webcamRef.current?.stream
+        const stream = webcamRef.current?.stream;
         if (!stream) {
-            toast.error('Camera not ready')
-            setStatus('error')
-            return
+            toast.error('Camera not ready');
+            setStatus('error');
+            return;
         }
 
         try {
             const recorder = new MediaRecorder(stream, {
-                mimeType: 'video/webm;codecs=vp9,opus'
-            })
+                mimeType: 'video/webm;codecs=vp9,opus',
+            });
 
             recorder.ondataavailable = (e) => {
                 if (e.data && e.data.size > 0) {
-                    chunksRef.current.push(e.data)
+                    chunksRef.current.push(e.data);
                 }
-            }
+            };
 
             recorder.onstop = () => {
-                const blob = new Blob(chunksRef.current, { type: 'video/webm' })
-                setRecordedBlob(blob)
-                setRecordedVideoURL(URL.createObjectURL(blob))
-                setStatus('reviewing')
-            }
+                const blob = new Blob(chunksRef.current, { type: 'video/webm' });
+                setRecordedBlob(blob);
+                setRecordedVideoURL(URL.createObjectURL(blob));
+                setStatus('reviewing');
+            };
 
-            mediaRecorderRef.current = recorder
-            recorder.start()
+            mediaRecorderRef.current = recorder;
+            recorder.start();
 
             // Start timer
-            if (recordTimerRef.current) clearInterval(recordTimerRef.current)
+            if (recordTimerRef.current) clearInterval(recordTimerRef.current);
 
             recordTimerRef.current = setInterval(() => {
-                setRecordTimeRemaining(prev => {
-                    const newTime = prev - 1
-                    setRecordProgress(((maxResponseTime - newTime) / maxResponseTime) * 100)
+                setRecordTimeRemaining((prev) => {
+                    const newTime = prev - 1;
+                    setRecordProgress(((maxResponseTime - newTime) / maxResponseTime) * 100);
 
                     if (newTime <= 0) {
-                        stopRecording()
-                        return 0
+                        stopRecording();
+                        return 0;
                     }
-                    return newTime
-                })
-            }, 1000)
+                    return newTime;
+                });
+            }, 1000);
         } catch (error) {
-            logError(error, { context: 'VideoRecorder.startRecording' })
-            toast.error('Failed to start recording')
-            setStatus('error')
+            logError(error, { context: 'VideoRecorder.startRecording' });
+            toast.error('Failed to start recording');
+            setStatus('error');
         }
-    }, [maxResponseTime, logError])
+    }, [maxResponseTime, logError]);
 
     const stopRecording = () => {
-        if (recordTimerRef.current) clearInterval(recordTimerRef.current)
+        if (recordTimerRef.current) clearInterval(recordTimerRef.current);
         if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
-            mediaRecorderRef.current.stop()
+            mediaRecorderRef.current.stop();
         } else {
-            setStatus('reviewing')
+            setStatus('reviewing');
         }
-    }
+    };
 
     const retryRecording = () => {
-        const MAX_REDOS = 3
+        const MAX_REDOS = 3;
         if (redoAttempts >= MAX_REDOS) {
-            toast.error(`Maximum retries (${MAX_REDOS}) reached`)
-            return
+            toast.error(`Maximum retries (${MAX_REDOS}) reached`);
+            return;
         }
 
-        setRedoAttempts(prev => prev + 1)
+        setRedoAttempts((prev) => prev + 1);
 
         // Cleanup
         if (recordedVideoURL) {
-            URL.revokeObjectURL(recordedVideoURL)
-            setRecordedVideoURL(null)
+            URL.revokeObjectURL(recordedVideoURL);
+            setRecordedVideoURL(null);
         }
-        setRecordedBlob(null)
-        chunksRef.current = []
+        setRecordedBlob(null);
+        chunksRef.current = [];
 
         if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
-            mediaRecorderRef.current.stop()
+            mediaRecorderRef.current.stop();
         }
-        mediaRecorderRef.current = null
+        mediaRecorderRef.current = null;
 
         // Clear timers
-        if (prepTimerRef.current) clearInterval(prepTimerRef.current)
-        if (recordTimerRef.current) clearInterval(recordTimerRef.current)
-        if (countdownTimerRef.current) clearInterval(countdownTimerRef.current)
+        if (prepTimerRef.current) clearInterval(prepTimerRef.current);
+        if (recordTimerRef.current) clearInterval(recordTimerRef.current);
+        if (countdownTimerRef.current) clearInterval(countdownTimerRef.current);
 
         // Restart countdown
-        setTimeout(() => startCountdown(), 500)
-    }
+        setTimeout(() => startCountdown(), 500);
+    };
 
     const submitRecording = async () => {
         if (!recordedBlob) {
-            toast.error('No recording available')
-            return
+            toast.error('No recording available');
+            return;
         }
 
-        setStatus('submitting')
+        setStatus('submitting');
 
         try {
-            const formData = new FormData()
-            formData.append('videoResponse', recordedBlob, 'answer.webm')
-            const duration = Math.min(maxResponseTime, maxResponseTime - recordTimeRemaining)
-            formData.append('responseTimeMs', (duration * 1000).toString())
-            formData.append('redoAttemptNumber', redoAttempts.toString())
+            const formData = new FormData();
+            formData.append('videoResponse', recordedBlob, 'answer.webm');
+            const duration = Math.min(maxResponseTime, maxResponseTime - recordTimeRemaining);
+            formData.append('responseTimeMs', (duration * 1000).toString());
+            formData.append('redoAttemptNumber', redoAttempts.toString());
 
             const response = await fetch(
                 `/api/interviews/${interviewId}/questions/${questionId}/response`,
                 {
                     method: 'POST',
-                    body: formData
+                    body: formData,
                 }
-            )
+            );
 
             if (!response.ok) {
-                const errorData = await response.json().catch(() => ({}))
-                throw new Error(`Server error: ${response.status}. ${errorData?.error?.message || ''}`)
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(
+                    `Server error: ${response.status}. ${errorData?.error?.message || ''}`
+                );
             }
 
-            toast.success('Response submitted!')
-            router.push(`/interviews/job/${interviewId}`)
+            toast.success('Response submitted!');
+            router.push(`/interviews/job/${interviewId}`);
         } catch (error) {
-            logError(error, { context: 'VideoRecorder.submitRecording' })
-            setStatus('reviewing')
-            toast.error('Failed to submit. Please try again.')
+            logError(error, { context: 'VideoRecorder.submitRecording' });
+            setStatus('reviewing');
+            toast.error('Failed to submit. Please try again.');
         }
-    }
+    };
 
     // Cleanup on unmount
     useEffect(() => {
         return () => {
-            if (prepTimerRef.current) clearInterval(prepTimerRef.current)
-            if (recordTimerRef.current) clearInterval(recordTimerRef.current)
-            if (countdownTimerRef.current) clearInterval(countdownTimerRef.current)
-            if (recordedVideoURL) URL.revokeObjectURL(recordedVideoURL)
-        }
-    }, [recordedVideoURL])
+            if (prepTimerRef.current) clearInterval(prepTimerRef.current);
+            if (recordTimerRef.current) clearInterval(recordTimerRef.current);
+            if (countdownTimerRef.current) clearInterval(countdownTimerRef.current);
+            if (recordedVideoURL) URL.revokeObjectURL(recordedVideoURL);
+        };
+    }, [recordedVideoURL]);
 
     const formatTime = (seconds: number) => {
-        const mins = Math.floor(seconds / 60)
-        const secs = seconds % 60
-        return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`
-    }
+        const mins = Math.floor(seconds / 60);
+        const secs = seconds % 60;
+        return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    };
 
     // Get current device constraints
     const videoConstraints = getSelectedCamera()
         ? { deviceId: { exact: getSelectedCamera()! }, width: 1280, height: 720 }
-        : { width: 1280, height: 720 }
+        : { width: 1280, height: 720 };
 
     const audioConstraints = getSelectedMicrophone()
         ? { deviceId: { exact: getSelectedMicrophone()! } }
-        : true
+        : true;
 
     return (
         <>
-            <DeviceSetupModal
-                open={showDeviceModal}
-                onComplete={handleDeviceChange}
-            />
+            <DeviceSetupModal open={showDeviceModal} onComplete={handleDeviceChange} />
 
             <div className="flex flex-col h-full p-6" data-testid="video-recorder">
                 {/* Timer Header */}
@@ -388,7 +390,9 @@ export default function VideoRecorder({
                                 {status === 'countdown' && countdown}
                                 {status === 'recording' && formatTime(recordTimeRemaining)}
                             </div>
-                            {(status === 'preparing' || status === 'recording' || status === 'idle') && (
+                            {(status === 'preparing' ||
+                                status === 'recording' ||
+                                status === 'idle') && (
                                 <Button
                                     variant="ghost"
                                     size="sm"
@@ -444,8 +448,8 @@ export default function VideoRecorder({
                                 muted
                                 className={
                                     showFace
-                                        ? "w-full h-full object-cover"
-                                        : "w-full h-full object-cover opacity-0 absolute"
+                                        ? 'w-full h-full object-cover'
+                                        : 'w-full h-full object-cover opacity-0 absolute'
                                 }
                                 data-testid="webcam-video"
                                 onUserMedia={handleWebcamReady}
@@ -465,14 +469,19 @@ export default function VideoRecorder({
                                 <div className="absolute inset-0 flex items-center justify-center bg-black/50">
                                     <div className="text-center p-4 bg-background/80 rounded-lg">
                                         <Camera className="h-12 w-12 mx-auto text-muted-foreground mb-2" />
-                                        <p className="text-muted-foreground">Camera active (preview hidden)</p>
+                                        <p className="text-muted-foreground">
+                                            Camera active (preview hidden)
+                                        </p>
                                     </div>
                                 </div>
                             )}
 
                             {status === 'countdown' && (
                                 <div className="absolute inset-0 flex items-center justify-center bg-black/50">
-                                    <div className="text-9xl font-bold text-white animate-pulse" data-testid="countdown-overlay">
+                                    <div
+                                        className="text-9xl font-bold text-white animate-pulse"
+                                        data-testid="countdown-overlay"
+                                    >
                                         {countdown}
                                     </div>
                                 </div>
@@ -494,8 +503,8 @@ export default function VideoRecorder({
                         <Button
                             variant="outline"
                             onClick={() => {
-                                if (prepTimerRef.current) clearInterval(prepTimerRef.current)
-                                startCountdown()
+                                if (prepTimerRef.current) clearInterval(prepTimerRef.current);
+                                startCountdown();
                             }}
                             data-testid="skip-prep-button"
                         >
@@ -505,14 +514,21 @@ export default function VideoRecorder({
 
                     {status === 'countdown' && (
                         <div className="flex items-center justify-center">
-                            <div className="text-5xl font-bold text-primary animate-pulse" data-testid="countdown-display">
+                            <div
+                                className="text-5xl font-bold text-primary animate-pulse"
+                                data-testid="countdown-display"
+                            >
                                 {countdown}
                             </div>
                         </div>
                     )}
 
                     {status === 'recording' && (
-                        <Button onClick={stopRecording} variant="destructive" data-testid="stop-recording-button">
+                        <Button
+                            onClick={stopRecording}
+                            variant="destructive"
+                            data-testid="stop-recording-button"
+                        >
                             Stop Recording
                         </Button>
                     )}
@@ -544,5 +560,5 @@ export default function VideoRecorder({
                 </div>
             </div>
         </>
-    )
+    );
 }
