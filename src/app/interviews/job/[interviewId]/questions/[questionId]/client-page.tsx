@@ -190,6 +190,8 @@ export default function QuestionAnswerClient() {
                         <VideoRecorder
                             interviewId={params.interviewId as string}
                             questionId={params.questionId as string}
+                            questionNumber={question.questionNumber}
+                            totalQuestions={question.totalQuestions}
                             showFace={showFace}
                             prepTime={question.prepTime ?? 30}
                             maxResponseTime={question.timeToAnswer ?? 120}
