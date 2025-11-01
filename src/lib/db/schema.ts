@@ -91,18 +91,18 @@ export const companyProfiles = pgTable('company_profiles', {
   domain: text('domain'),
   industry: text('industry'),
   sizeCategory: companySizeCategoryEnum('size_category'),
-  
+
   // Culture & Values Data
   coreValues: jsonb('core_values'), // [{"value": "Innovation", "description": "...", "intensity": 8}]
   cultureKeywords: text('culture_keywords').array(), // ["fast-paced", "collaborative", "data-driven"]
   leadershipStyle: text('leadership_style'), // "democratic", "hierarchical", "flat"
   workEnvironment: text('work_environment'), // "remote-first", "hybrid", "in-office"
-  
+
   // Metadata
   lastResearchedAt: timestamp('last_researched_at'),
   researchConfidenceScore: integer('research_confidence_score'), // 0-100
   sourceUrls: text('source_urls').array(),
-  
+
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull()
 });

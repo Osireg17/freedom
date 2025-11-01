@@ -49,14 +49,14 @@ export const generateJobInterviewQuestionsJob = schemaTask({
   schema: JobInterviewPayloadSchema,
 
   async run(payload): Promise<TaskResult> {
-    logger.info('Starting job interview questions generation', { 
-      interviewId: payload.interviewId 
+    logger.info('Starting job interview questions generation', {
+      interviewId: payload.interviewId
     });
 
     try {
       // Generate prompt based on job information
       const prompt = generateInterviewPrompt(payload);
-      logger.info('Generated interview prompt', { 
+      logger.info('Generated interview prompt', {
         prompt: prompt.substring(0, 200) + '...' // Log just the beginning for brevity
       });
 
@@ -69,14 +69,14 @@ export const generateJobInterviewQuestionsJob = schemaTask({
 
       // Store questions in database
       await storeInterviewQuestions(payload.interviewId, questionsResponse.questions);
-      logger.info('Stored interview questions in database', { 
-        interviewId: payload.interviewId 
+      logger.info('Stored interview questions in database', {
+        interviewId: payload.interviewId
       });
 
       // Update interview status to ready
       await updateInterviewStatus(payload.interviewId, 'ongoing');
-      logger.info('Updated interview status to ongoing', { 
-        interviewId: payload.interviewId 
+      logger.info('Updated interview status to ongoing', {
+        interviewId: payload.interviewId
       });
 
       return {
@@ -95,7 +95,7 @@ export const generateJobInterviewQuestionsJob = schemaTask({
 async function generateQuestionsWithOpenAI(prompt: string): Promise<z.infer<typeof InterviewQuestionsResponseSchema>> {
   try {
     const response = await openai.responses.parse({
-      model: "gpt-4.1-mini",
+      model: "gpt-5-mini",
       input: [
         {
           role: "system",
@@ -138,7 +138,7 @@ async function generateQuestionsWithOpenAI(prompt: string): Promise<z.infer<type
 
   } catch (error) {
     logger.error('Error generating questions with OpenAI Responses API', { error });
-    
+
     // Provide more specific error context
     if (error instanceof Error) {
       throw new Error(`Failed to generate questions: ${error.message}`);
@@ -150,9 +150,9 @@ async function generateQuestionsWithOpenAI(prompt: string): Promise<z.infer<type
 // Helper function to update interview status
 async function updateInterviewStatus(interviewId: string, status: 'not_started' | 'ongoing' | 'completed') {
   await db.update(interviews)
-    .set({ 
-      status, 
-      updatedAt: new Date() 
+    .set({
+      status,
+      updatedAt: new Date()
     })
     .where(eq(interviews.id, interviewId));
 }
@@ -161,13 +161,13 @@ async function updateInterviewStatus(interviewId: string, status: 'not_started' 
 async function storeInterviewQuestions(interviewId: string, questions: GeneratedQuestion[]) {
   for (let i = 0; i < questions.length; i++) {
     const question = questions[i];
-    
+
     await db.insert(interviewQuestions).values({
       interviewId,
       questionNumber: i + 1,
       questionText: question.question,
-      questionType: question.type === 'skill-based' ? 'technical' : 
-        ['behavioral', 'situational'].includes(question.type) 
+      questionType: question.type === 'skill-based' ? 'technical' :
+        ['behavioral', 'situational'].includes(question.type)
           ? question.type as 'behavioral' | 'situational'
           : 'other',
     });

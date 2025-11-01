@@ -1,11 +1,13 @@
 import { db } from '@/lib/db';
-import { interviewAnswers, users, interviewQuestions } from '@/lib/db/schema';
+import { interviewAnswers, users, interviewQuestions, interviews } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
-import { schemaTask, configure, logger } from '@trigger.dev/sdk/v3';
+import { schemaTask, configure, logger, batch } from '@trigger.dev/sdk/v3';
 import { createClient as createDeepgramClient } from '@deepgram/sdk';
 import { z } from 'zod';
 import { supabaseAdmin } from '@/lib/supabase/supabaseAdmin';
 import { analyseSTARTask } from './analyse-star-task';
+import { analyseCultureTask } from './analyse-culture-task';
+import { getOrResearchCompanyProfile } from '@/lib/analysis/company-research';
 
 // Configure Trigger.dev
 configure({
@@ -34,9 +36,8 @@ export const recordInterviewTask = schemaTask({
       questionId: payload.questionId,
     });
 
-    try {
-      // Initialize Deepgram with v3 SDK
-      const deepgram = createDeepgramClient(process.env.NEXT_PUBLIC_DEEPGRAM_API_KEY as string);
+    // Initialize Deepgram with v3 SDK
+    const deepgram = createDeepgramClient(process.env.NEXT_PUBLIC_DEEPGRAM_API_KEY as string);
 
       // 1. Get audio from storage
       const { data: audioData, error: downloadError } = await supabaseAdmin.storage
@@ -52,7 +53,7 @@ export const recordInterviewTask = schemaTask({
       // 2. Transcribe audio with Deepgram using v3 SDK
       const audioBuffer = await audioData.arrayBuffer();
       const nodeBuffer = Buffer.from(audioBuffer);
-      
+
       const { result, error } = await deepgram.listen.prerecorded.transcribeFile(
         nodeBuffer, // Pass the Node.js Buffer
         {
@@ -76,8 +77,8 @@ export const recordInterviewTask = schemaTask({
         transcriptSnippet: transcript.substring(0, 100), // Log first 100 characters
       });
 
-      // 3. Get user subscription tier and question data for analysis
-      const [userData, questionData] = await Promise.all([
+      // 3. Get user subscription tier, question data, and interview data for analysis
+      const [userData, questionData, interviewData] = await Promise.all([
         db.select({
           subscriptionTier: users.subscriptionTier,
         })
@@ -91,6 +92,14 @@ export const recordInterviewTask = schemaTask({
         })
         .from(interviewQuestions)
         .where(eq(interviewQuestions.id, payload.questionId))
+        .limit(1),
+
+        db.select({
+          companyName: interviews.companyName,
+        })
+        .from(interviewQuestions)
+        .innerJoin(interviews, eq(interviewQuestions.interviewId, interviews.id))
+        .where(eq(interviewQuestions.id, payload.questionId))
         .limit(1)
       ]);
 
@@ -101,47 +110,129 @@ export const recordInterviewTask = schemaTask({
         throw new Error(`Question not found: ${payload.questionId}`);
       }
 
-      logger.info('Starting STAR analysis with batch.triggerAndWait', {
+      // 4. Get company profile for culture analysis (if applicable)
+      const companyName = interviewData[0]?.companyName;
+      let companyProfile = null;
+
+      if (userTier !== 'free' && companyName) {
+        logger.info('Fetching company profile for culture analysis', {
+          responseId: payload.responseId,
+          companyName,
+          userTier,
+        });
+
+        companyProfile = await getOrResearchCompanyProfile(companyName);
+
+        if (companyProfile && companyProfile.coreValues) {
+          logger.info('Company profile retrieved', {
+            responseId: payload.responseId,
+            company: companyProfile.companyName,
+            valuesCount: companyProfile.coreValues.length,
+          });
+        } else {
+          logger.info('No company profile available for culture analysis', {
+            responseId: payload.responseId,
+            companyName,
+          });
+        }
+      }
+
+      // 5. Fan-out: Run analysis tasks in parallel using batch.triggerByTaskAndWait
+      logger.info('Starting parallel analysis tasks', {
         responseId: payload.responseId,
         userTier,
         questionType: question.questionType,
+        hasCultureAnalysis: !!(companyProfile && companyProfile.coreValues),
       });
 
-      // 4. Run STAR analysis using the task directly
-      const taskResult = await analyseSTARTask.triggerAndWait({
-        transcription: transcript,
-        questionText: question.questionText,
-        questionType: question.questionType,
-        userTier: userTier,
-        answerId: payload.responseId,
-      });
+      // Trigger all tasks in parallel and wait for results
+      // Note: We conditionally include culture analysis based on company profile availability
+      const analysisResults = companyProfile && companyProfile.coreValues
+        ? await batch.triggerByTaskAndWait([
+            {
+              task: analyseSTARTask,
+              payload: {
+                transcription: transcript,
+                questionText: question.questionText,
+                questionType: question.questionType,
+                userTier: userTier,
+                answerId: payload.responseId,
+              }
+            },
+            {
+              task: analyseCultureTask,
+              payload: {
+                transcription: transcript,
+                questionText: question.questionText,
+                companyProfile,
+                userTier,
+                answerId: payload.responseId,
+              }
+            }
+          ])
+        : await batch.triggerByTaskAndWait([
+            {
+              task: analyseSTARTask,
+              payload: {
+                transcription: transcript,
+                questionText: question.questionText,
+                questionType: question.questionType,
+                userTier: userTier,
+                answerId: payload.responseId,
+              }
+            }
+          ]);
 
-      // Check if analysis succeeded
-      if (!taskResult.ok) {
-        logger.error("STAR analysis task failed", {
-          error: taskResult.error,
+      const { runs } = analysisResults;
+
+      // 6. Process STAR results (first task, always present)
+      const starRun = runs[0];
+      if (!starRun.ok) {
+        logger.error("STAR analysis failed", {
+          error: starRun.error,
           responseId: payload.responseId,
-          questionId: payload.questionId,
         });
-        throw new Error(`STAR analysis failed: ${taskResult.error}`);
+        throw new Error(`STAR analysis failed: ${starRun.error}`);
       }
 
-      const starAnalysisResult = taskResult.output;
-      const overallScore = taskResult.output.overallScore;
+      const starAnalysisResult = starRun.output;
+      const overallScore = starRun.output.overallScore;
 
-      logger.info("STAR analysis successful", {
+      logger.info("STAR analysis completed successfully", {
         responseId: payload.responseId,
-        overallScore: taskResult.output.overallScore,
-        starCompleteness: taskResult.output.starCompleteness,
+        overallScore: starRun.output.overallScore,
+        starCompleteness: starRun.output.starCompleteness,
       });
 
-      // 5. Update database with transcription and analysis results
+      // 7. Process Culture results (second task, conditional)
+      let cultureAnalysisResult = null;
+
+      if (runs.length > 1 && runs[1]) {
+        const cultureRun = runs[1];
+
+        if (cultureRun.ok) {
+          cultureAnalysisResult = cultureRun.output;
+          logger.info('Culture alignment analysis completed successfully', {
+            responseId: payload.responseId,
+            overallAlignment: cultureAnalysisResult?.overall_alignment,
+          });
+        } else {
+          logger.warn('Culture alignment analysis failed - continuing without it', {
+            responseId: payload.responseId,
+            error: cultureRun.error,
+          });
+          // Don't throw - culture analysis failure shouldn't break the pipeline
+        }
+      }
+
+      // 6. Update database with transcription and analysis results
       await db.update(interviewAnswers)
         .set({
           transcription: transcript,
           overallScore: overallScore,
           starScores: starAnalysisResult,
           evaluation: starAnalysisResult.evaluation,
+          companyAlignmentScores: cultureAnalysisResult,
           analyzedAt: new Date(),
           updatedAt: new Date(),
           audioUrl: payload.audioPath
@@ -167,22 +258,21 @@ export const recordInterviewTask = schemaTask({
         logger.info('Audio file deleted successfully', { audioPath: payload.audioPath });
       }
 
-      return {
-        success: true,
+      logger.info('Interview recording process completed successfully', {
         responseId: payload.responseId,
-        interviewId: payload.interviewId,
-        transcript,
-        analysis: {
-          overallScore,
-          starAnalysis: starAnalysisResult,
-        },
-      };
-    } catch (error) {
-      logger.error('Error processing interview recording', {
-        responseId: payload.responseId,
-        error: error instanceof Error ? error.message : 'Unknown error',
       });
-      throw error;
-    }
+
+    return {
+      success: true,
+      responseId: payload.responseId,
+      interviewId: payload.interviewId,
+      transcript,
+      analysis: {
+        overallScore,
+        starAnalysis: starAnalysisResult,
+        cultureAlignment: cultureAnalysisResult,
+      },
+    };
+
   },
 });
