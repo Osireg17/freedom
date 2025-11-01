@@ -4,10 +4,16 @@ import { task, logger } from "@trigger.dev/sdk/v3";
 import OpenAI from "openai";
 
 
-// Initialize OpenAI with consistent API key
-const openai = new OpenAI({
-  apiKey: process.env.NEXT_PUBLIC_OPENAI_API_KEY || process.env.OPENAI_API_KEY,
-});
+// Lazy-initialize OpenAI client to avoid import-time errors
+let openaiClient: OpenAI | null = null;
+function getOpenAI(): OpenAI {
+  if (!openaiClient) {
+    openaiClient = new OpenAI({
+      apiKey: process.env.NEXT_PUBLIC_OPENAI_API_KEY || process.env.OPENAI_API_KEY,
+    });
+  }
+  return openaiClient;
+}
 
 interface STARTaskPayload {
   transcription: string;
@@ -103,7 +109,7 @@ export const analyseSTARTask = task({
       const prompt = getSTARAnalysisPrompt(userTier);
 
       // Select model based on tier
-      const model = userTier === 'pro' ? 'gpt-5-mini' : 'gpt-4.1-mini';
+      const model = 'gpt-5-mini';
 
       logger.info("Calling OpenAI for STAR analysis", {
         model,
@@ -111,21 +117,25 @@ export const analyseSTARTask = task({
         answerId,
       });
 
-      const response = await openai.chat.completions.create({
+      const systemPrompt = prompt;
+      const userContent = `QUESTION: ${questionText}\n\nINTERVIEW RESPONSE: ${transcription}\n\nQUESTION TYPE: ${questionType}`;
+
+      const response = await getOpenAI().responses.create({
         model,
-        messages: [
-          { role: "system", content: prompt },
-          {
-            role: "user",
-            content: `QUESTION: ${questionText}\n\nINTERVIEW RESPONSE: ${transcription}\n\nQUESTION TYPE: ${questionType}`
-          }
+        input: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userContent }
         ],
-        response_format: { type: "json_object" },
-        temperature: 0.2, // Low temperature for consistent analysis
-        max_tokens: userTier === 'pro' ? 2000 : 1000,
+        text: {
+          format: { type: "json_object" }
+        },
+        reasoning: {
+          effort: "medium"
+        },
+        store: true,
       });
 
-      const content = response.choices[0].message.content;
+      const content = response.output_text;
       if (!content) {
         throw new Error("No content received from OpenAI API");
       }

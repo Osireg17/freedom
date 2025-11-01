@@ -15,6 +15,8 @@ import {
     setActiveMediaStream,
     getSelectedCamera,
     getSelectedMicrophone,
+    clearDeviceSettings,
+    clearActiveMediaStream,
 } from '@/lib/device-session';
 import DeviceSetupModal from '@/components/interviews/device/device-setup-modal';
 import InterviewIntroModal from '@/components/interviews/interview-intro-modal';
@@ -173,6 +175,15 @@ export default function VideoRecorder({
 
     // Device modal handlers
     const handleOpenSettings = useCallback(() => {
+        // Stop the current webcam stream
+        if (webcamRef.current?.stream) {
+            webcamRef.current.stream.getTracks().forEach((track) => track.stop());
+        }
+
+        // Clear stored device settings and active stream
+        clearDeviceSettings();
+        clearActiveMediaStream();
+
         setShowDeviceModal(true);
     }, []);
 
