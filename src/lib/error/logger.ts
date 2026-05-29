@@ -19,13 +19,13 @@ export function logErrorToService(error: Error | unknown, context: ErrorContext 
   const normalizedError = error instanceof Error ? error : new Error(
     typeof error === 'string' ? error : 'Unknown error'
   );
-  
+
   // Capture additional properties for TypeError specifically
   const typeErrorInfo = error instanceof TypeError ? {
     targetObject: error.name === 'TypeError' && error.message.includes('null') ? 'null' : 'undefined',
     operation: error.message.includes('setting') ? 'property write' : 'unknown operation'
   } : {};
-  
+
   // Create a structured error object
   const errorData = {
     name: normalizedError.name,

@@ -12,6 +12,7 @@ import {
 export const interviewTypeEnum = pgEnum('interview_type', ['ai', 'custom', 'resume']);
 export const interviewStatusEnum = pgEnum('interview_status', ['not_started', 'ongoing', 'completed']);
 export const questionTypeEnum = pgEnum('question_type', ['behavioral', 'technical', 'situational', 'other']);
+export const companySizeCategoryEnum = pgEnum('company_size_category', ['startup', 'mid-size', 'enterprise']);
 
 // Users table - updated for Supabase Auth
 export const users = pgTable('users', {
@@ -75,6 +76,33 @@ export const interviewAnswers = pgTable('interview_answers', {
   audioUrl: text('audio_url'),
   audioDurationMs: integer('audio_duration_ms'),
   analyzedAt: timestamp('analyzed_at'),
+  // New contextual scoring columns
+  contextualRelevanceScores: jsonb('contextual_relevance_scores'),
+  companyAlignmentScores: jsonb('company_alignment_scores'),
+  jobAlignmentBreakdown: jsonb('job_alignment_breakdown'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull()
+});
+
+// Company Profiles table
+export const companyProfiles = pgTable('company_profiles', {
+  id: uuid('id').primaryKey().default(sql`uuid_generate_v4()`),
+  companyName: text('company_name').notNull(),
+  domain: text('domain'),
+  industry: text('industry'),
+  sizeCategory: companySizeCategoryEnum('size_category'),
+
+  // Culture & Values Data
+  coreValues: jsonb('core_values'), // [{"value": "Innovation", "description": "...", "intensity": 8}]
+  cultureKeywords: text('culture_keywords').array(), // ["fast-paced", "collaborative", "data-driven"]
+  leadershipStyle: text('leadership_style'), // "democratic", "hierarchical", "flat"
+  workEnvironment: text('work_environment'), // "remote-first", "hybrid", "in-office"
+
+  // Metadata
+  lastResearchedAt: timestamp('last_researched_at'),
+  researchConfidenceScore: integer('research_confidence_score'), // 0-100
+  sourceUrls: text('source_urls').array(),
+
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull()
 });
@@ -116,4 +144,9 @@ export const interviewAnswersRelations = relations(interviewAnswers, ({ one }) =
     fields: [interviewAnswers.interviewQuestionId],
     references: [interviewQuestions.id]
   })
+}));
+
+export const companyProfilesRelations = relations(companyProfiles, ({ many }) => ({
+  // Note: No direct foreign key relationship, but companies can be referenced
+  // by name in interviews table via companyName field
 }));

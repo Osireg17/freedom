@@ -1,76 +1,107 @@
-'use client'
+'use client';
 
-import React, { useState, useEffect, useCallback, useRef } from 'react'
-import { useRouter } from 'next/navigation'
-import Webcam from 'react-webcam'
-import { Button } from '@/components/ui/button'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Label } from '@/components/ui/label'
-import { toast } from 'sonner'
-import { useErrorLogging } from '@/hooks/use-error-logging'
-import { Mic } from 'lucide-react'
-import { storeDeviceSettings, setActiveMediaStream } from '@/lib/device-session'
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useRouter } from 'next/navigation';
+import Webcam from 'react-webcam';
+import { Button } from '@/components/ui/button';
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select';
+import { Label } from '@/components/ui/label';
+import { toast } from 'sonner';
+import { useErrorLogging } from '@/hooks/use-error-logging';
+import { Mic } from 'lucide-react';
+import {
+    storeDeviceSettings,
+    setActiveMediaStream,
+    clearDeviceSettings,
+} from '@/lib/device-session';
 
 interface DeviceSelectorProps {
-    interviewId: string
-    questionId: string
+    interviewId: string;
+    questionId?: string; // Optional - will fetch first question if not provided
 }
 
-export default function DeviceSelector({ interviewId, questionId }: DeviceSelectorProps) {
-    const router = useRouter()
-    const { logError } = useErrorLogging()
-    const [cameras, setCameras] = useState<MediaDeviceInfo[]>([])
-    const [microphones, setMicrophones] = useState<MediaDeviceInfo[]>([])
-    const [selectedCamera, setSelectedCamera] = useState<string>('')
-    const [selectedMicrophone, setSelectedMicrophone] = useState<string>('')
-    const [audioLevel, setAudioLevel] = useState(0)
-    const webcamRef = useRef<Webcam>(null)
-    const audioContextRef = useRef<AudioContext | null>(null)
-    const analyserRef = useRef<AnalyserNode | null>(null)
-    const dataArrayRef = useRef<Uint8Array | null>(null)
-    const animationFrameRef = useRef<number | null>(null)
+export default function DeviceSelector({ interviewId }: DeviceSelectorProps) {
+    const router = useRouter();
+    const { logError } = useErrorLogging();
+    const [cameras, setCameras] = useState<MediaDeviceInfo[]>([]);
+    const [microphones, setMicrophones] = useState<MediaDeviceInfo[]>([]);
+    const [selectedCamera, setSelectedCamera] = useState<string>('');
+    const [selectedMicrophone, setSelectedMicrophone] = useState<string>('');
+    const [audioLevel, setAudioLevel] = useState(0);
+    const webcamRef = useRef<Webcam>(null);
+    const audioContextRef = useRef<AudioContext | null>(null);
+    const analyserRef = useRef<AnalyserNode | null>(null);
+    const dataArrayRef = useRef<Uint8Array | null>(null);
+    const animationFrameRef = useRef<number | null>(null);
+    const audioStreamRef = useRef<MediaStream | null>(null);
 
     const getDevices = useCallback(async () => {
         try {
             const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-            const devices = await navigator.mediaDevices.enumerateDevices()
-            const videoInputs = devices.filter(device => device.kind === 'videoinput')
-            const audioInputs = devices.filter(device => device.kind === 'audioinput')
+            const devices = await navigator.mediaDevices.enumerateDevices();
+            const videoInputs = devices.filter((device) => device.kind === 'videoinput');
+            const audioInputs = devices.filter((device) => device.kind === 'audioinput');
 
-            setCameras(videoInputs)
-            setMicrophones(audioInputs)
+            setCameras(videoInputs);
+            setMicrophones(audioInputs);
 
+            // Default to first device
             if (videoInputs.length > 0 && !selectedCamera) {
-                setSelectedCamera(videoInputs[0].deviceId)
+                setSelectedCamera(videoInputs[0].deviceId);
             }
             if (audioInputs.length > 0 && !selectedMicrophone) {
-                setSelectedMicrophone(audioInputs[0].deviceId)
+                setSelectedMicrophone(audioInputs[0].deviceId);
             }
 
-            stream.getTracks().forEach(track => track.stop());
+            stream.getTracks().forEach((track) => track.stop());
         } catch (error) {
-            logError(error, { context: 'DeviceSelector.getDevices' })
-            toast.error('Could not list your cameras and microphones. Please grant permission to your camera and microphone.')
+            logError(error, { context: 'DeviceSelector.getDevices' });
+            toast.error(
+                'Could not list your cameras and microphones. Please grant permission to your camera and microphone.'
+            );
         }
-    }, [logError, selectedCamera, selectedMicrophone])
+    }, [logError, selectedCamera, selectedMicrophone]);
 
     useEffect(() => {
-        getDevices()
-    }, [getDevices])
+        // Clear any existing device settings to force reconfiguration
+        clearDeviceSettings();
+        getDevices();
+    }, [getDevices]);
 
     const setupAudioAnalysis = useCallback(async () => {
         if (!selectedMicrophone) return;
 
+        // Clean up previous audio stream and context
+        if (audioStreamRef.current) {
+            audioStreamRef.current.getTracks().forEach((track) => track.stop());
+            audioStreamRef.current = null;
+        }
+        if (animationFrameRef.current) {
+            cancelAnimationFrame(animationFrameRef.current);
+            animationFrameRef.current = null;
+        }
+        if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
+            await audioContextRef.current.close();
+            audioContextRef.current = null;
+        }
+
         try {
             const stream = await navigator.mediaDevices.getUserMedia({
                 audio: { deviceId: { exact: selectedMicrophone } },
-                video: false
+                video: false,
             });
 
-            if (!audioContextRef.current) {
-                audioContextRef.current = new AudioContext();
-            }
-            const audioContext = audioContextRef.current;
+            audioStreamRef.current = stream;
+
+            const audioContext = new AudioContext();
+            audioContextRef.current = audioContext;
+
             const source = audioContext.createMediaStreamSource(stream);
             const analyser = audioContext.createAnalyser();
             analyser.fftSize = 256;
@@ -97,8 +128,14 @@ export default function DeviceSelector({ interviewId, questionId }: DeviceSelect
             updateAudioLevel();
 
             return () => {
-                if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
-                stream.getTracks().forEach(track => track.stop());
+                if (animationFrameRef.current) {
+                    cancelAnimationFrame(animationFrameRef.current);
+                    animationFrameRef.current = null;
+                }
+                if (audioStreamRef.current) {
+                    audioStreamRef.current.getTracks().forEach((track) => track.stop());
+                    audioStreamRef.current = null;
+                }
                 if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
                     audioContextRef.current.close();
                     audioContextRef.current = null;
@@ -125,20 +162,36 @@ export default function DeviceSelector({ interviewId, questionId }: DeviceSelect
 
     const handleProceed = () => {
         if (!selectedCamera || !selectedMicrophone) {
-            toast.error('Please select a camera and a microphone to continue.')
-            return
+            toast.error('Please select a camera and a microphone to continue.');
+            return;
         }
 
+        console.log('[DeviceSelector] Proceeding to video recorder...');
+        const startTime = performance.now();
+
         // Store device settings with session management
-        storeDeviceSettings(selectedCamera, selectedMicrophone)
+        storeDeviceSettings(selectedCamera, selectedMicrophone);
 
         // Store the current webcam stream for reuse in the interview page
         if (webcamRef.current?.stream) {
-            setActiveMediaStream(webcamRef.current.stream)
+            console.log('[DeviceSelector] Storing active stream for reuse:', {
+                streamId: webcamRef.current.stream.id,
+                videoTracks: webcamRef.current.stream.getVideoTracks().length,
+                audioTracks: webcamRef.current.stream.getAudioTracks().length,
+                active: webcamRef.current.stream.active,
+            });
+            setActiveMediaStream(webcamRef.current.stream);
+        } else {
+            console.warn('[DeviceSelector] No webcam stream available to store!');
         }
 
-        router.push(`/interviews/job/${interviewId}/questions/${questionId}`)
-    }
+        const setupTime = performance.now() - startTime;
+        console.log(`[DeviceSelector] Device setup completed in ${setupTime.toFixed(2)}ms`);
+
+        // Navigate back to interview page after device setup
+        // User can select which question to start
+        router.push(`/interviews/job/${interviewId}`);
+    };
 
     return (
         <div className="flex flex-col items-center justify-center h-full p-6">
@@ -152,7 +205,7 @@ export default function DeviceSelector({ interviewId, questionId }: DeviceSelect
                                 <SelectValue placeholder="Select a camera" />
                             </SelectTrigger>
                             <SelectContent>
-                                {cameras.map(camera => (
+                                {cameras.map((camera) => (
                                     <SelectItem key={camera.deviceId} value={camera.deviceId}>
                                         {camera.label || `Camera ${cameras.indexOf(camera) + 1}`}
                                     </SelectItem>
@@ -167,7 +220,7 @@ export default function DeviceSelector({ interviewId, questionId }: DeviceSelect
                                 <SelectValue placeholder="Select a microphone" />
                             </SelectTrigger>
                             <SelectContent>
-                                {microphones.map(mic => (
+                                {microphones.map((mic) => (
                                     <SelectItem key={mic.deviceId} value={mic.deviceId}>
                                         {mic.label || `Microphone ${microphones.indexOf(mic) + 1}`}
                                     </SelectItem>
@@ -191,17 +244,24 @@ export default function DeviceSelector({ interviewId, questionId }: DeviceSelect
                 <div className="bg-muted rounded-lg overflow-hidden aspect-video">
                     {selectedCamera && (
                         <Webcam
+                            key={selectedCamera}
                             audio={false}
                             ref={webcamRef}
-                            videoConstraints={{ deviceId: { exact: selectedCamera }, width: 1280, height: 720 }}
+                            videoConstraints={{
+                                deviceId: { exact: selectedCamera },
+                                width: 1280,
+                                height: 720,
+                            }}
                             className="w-full h-full object-cover"
                         />
                     )}
                 </div>
             </div>
             <div className="mt-8">
-                <Button onClick={handleProceed} size="lg">Proceed to Interview</Button>
+                <Button onClick={handleProceed} size="lg">
+                    Proceed to Interview
+                </Button>
             </div>
         </div>
-    )
+    );
 }

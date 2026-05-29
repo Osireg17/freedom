@@ -2,75 +2,74 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { interviews, interviewQuestions } from '@/lib/db/schema';
 import { eq, and } from 'drizzle-orm';
-import { ApiErrors } from '@/lib/error/api-error';
-import { logServerEvent } from '@/lib/error/logger';
 import { withAxiom } from '@/lib/axiom/server';
 import { getCurrentUser } from '@/lib/actions/auth-actions';
+import {
+  wrapDatabaseOperation,
+  AuthenticationError,
+  AuthorizationError,
+  assertFound,
+} from '@/lib/error';
 
 // Define cache configuration
-export const dynamic = 'force-dynamic'; // Default to dynamic rendering
-export const revalidate = 60; // Revalidate cache every 60 seconds
+export const dynamic = 'force-dynamic';
+export const revalidate = 60;
 
 export const GET = withAxiom(async (
-  req: NextRequest, // Now we need the request for caching headers
+  req: NextRequest,
   { params }: { params: Promise<{ interviewId: string; questionId: string }> }
 ) => {
-  try {
-    const { interviewId, questionId } = await params;
-    
-    // Get authenticated user
-    const user = await getCurrentUser();
-    if (!user) {
-      return NextResponse.json(ApiErrors.UNAUTHORIZED().toResponse(), { 
-        status: 401 
-      });
-    }
-    
-    // Get the interview
-    const interview = await db.query.interviews.findFirst({
+  const { interviewId, questionId } = await params;
+
+  // Get authenticated user
+  const user = await getCurrentUser();
+  if (!user) {
+    throw new AuthenticationError('User must be authenticated to access questions');
+  }
+
+  // Get the interview
+  const interview = await wrapDatabaseOperation(
+    () => db.query.interviews.findFirst({
       where: eq(interviews.id, interviewId),
-      columns: { 
+      columns: {
         userId: true,
-        timeToAnswer: true 
+        timeToAnswer: true
       }
-    });
-    
-    if (!interview) {
-      return NextResponse.json(
-        ApiErrors.NOT_FOUND('Interview', interviewId).toResponse(), 
-        { status: 404 }
-      );
-    }
-    
-    // Check ownership
-    if (interview.userId !== user.id) {
-      return NextResponse.json(
-        ApiErrors.FORBIDDEN('You do not have permission to access this interview').toResponse(), 
-        { status: 403 }
-      );
-    }
-    
-    // Get the question
-    const question = await db.query.interviewQuestions.findFirst({
+    }),
+    { operation: 'read', table: 'interviews' }
+  );
+
+  assertFound(interview, 'Interview', interviewId);
+
+  // Check ownership
+  if (interview.userId !== user.id) {
+    throw new AuthorizationError('You do not have permission to access this interview');
+  }
+
+  // Get the question
+  const question = await wrapDatabaseOperation(
+    () => db.query.interviewQuestions.findFirst({
       where: and(
         eq(interviewQuestions.interviewId, interviewId),
         eq(interviewQuestions.id, questionId)
       )
-    });
-    
-    if (!question) {
-      return NextResponse.json(
-        ApiErrors.NOT_FOUND('Question', questionId).toResponse(), 
-        { status: 404 }
-      );
-    }
-    
-    // Get total number of questions in this interview
-    const totalQuestions = await db.query.interviewQuestions.findMany({
+    }),
+    { operation: 'read', table: 'interview_questions' }
+  );
+
+  assertFound(question, 'Question', questionId);
+
+  // Get total number of questions in this interview
+  const allQuestions = await wrapDatabaseOperation(
+    () => db.query.interviewQuestions.findMany({
       where: eq(interviewQuestions.interviewId, interviewId),
       columns: { id: true }
-    }).then(questions => questions.length);
-    
+    }),
+    { operation: 'query', table: 'interview_questions' }
+  );
+
+  const totalQuestions = allQuestions.length;
+
     // Create the response
     const response = NextResponse.json({
       id: question.id,
@@ -82,22 +81,9 @@ export const GET = withAxiom(async (
       prepTime: 30, // Default prep time, can be customized
       totalQuestions
     });
-    
-    // Add cache control headers
-    response.headers.set('Cache-Control', 'max-age=60, s-maxage=60, stale-while-revalidate=300');
-    
-    return response;
-    
-  } catch (error) {
-    // Log and return error
-    logServerEvent('error', 'Failed to get question', {
-      error: error instanceof Error ? error.message : String(error),
-      stack: error instanceof Error ? error.stack : undefined,
-    });
-    
-    return NextResponse.json(
-      ApiErrors.INTERNAL_ERROR('Failed to get question data.').toResponse(),
-      { status: 500 }
-    );
-  }
+
+  // Add cache control headers
+  response.headers.set('Cache-Control', 'max-age=60, s-maxage=60, stale-while-revalidate=300');
+
+  return response;
 });

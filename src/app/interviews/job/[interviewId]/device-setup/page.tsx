@@ -47,7 +47,7 @@ export default async function DeviceSetupPage({ params }: DeviceSetupPageProps) 
 
     return (
         <div className="h-screen">
-            <DeviceSelector interviewId={interviewId} questionId={questionId} />
+            <DeviceSelector interviewId={interviewId} />
         </div>
     );
 }
