@@ -3,6 +3,7 @@
 import { Resend } from 'resend';
 import { ContactEmail } from '@/components/emails/contact-email';
 import { contactFormSchema, type ContactFormValues } from '@/lib/schemas/contact-schema';
+import { logServerError, logServerEvent } from '@/lib/error/logger';
 
 // Initialize Resend with API key
 const resend = new Resend(process.env.NEXT_PUBLIC_RESEND_API_KEY);
@@ -60,7 +61,11 @@ export async function sendContactEmail(formData: ContactFormValues) {
     });
     
     if (result.error) {
-      console.error('Error sending email:', result.error);
+      logServerEvent('error', 'Resend API error', {
+        error: result.error,
+        subject: subjectTitle,
+        userEmail: email
+      });
       return {
         success: false,
         error: 'Failed to send email. Please try again later.'
@@ -71,7 +76,18 @@ export async function sendContactEmail(formData: ContactFormValues) {
       success: true
     };
   } catch (error) {
-    console.error('Contact form action error:', error);
+    if (error instanceof Error) {
+      logServerError(error, {
+        context: 'sendContactEmail',
+        formData: { subject: formData.subject, email: formData.email }
+      });
+    } else {
+      logServerEvent('error', 'Contact form action error', {
+        error: String(error),
+        formData: { subject: formData.subject, email: formData.email }
+      });
+    }
+
     return {
       success: false,
       error: 'An unexpected error occurred. Please try again later.'
