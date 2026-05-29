@@ -1,0 +1,8 @@
+.encore
+encore.gen.go
+encore.gen.cue
+/.encore
+node_modules
+/encore.gen
+infra.config.json
+BUCKET_SECRET_ACCESS_KEY=tsec_SaggmacBd4TDeER_+VrU3M8sWrxAxS6BcUL2qT6k8T1-wuf6rnVJj2H19_OVYD9gtyXFM8

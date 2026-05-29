@@ -4,7 +4,7 @@ This document compiles the information from the provided sources to offer a deta
 
 ## 1. Introduction and Vision
 
-AceYourHireVue is a SaaS platform designed to empower job seekers to excel in one-way interviews through **AI-driven, hyper-personalized preparation** that mirrors hiring expectations. It aims to transform anxiety into confidence by equipping users with the tools to articulate their skills effectively and stand out in competitive job markets.
+AceYourHireVue is a SaaS platform designed to empower job seekers to excel in one-way interviews through **AI-driven, hyper-personalised preparation** that mirrors hiring expectations. It aims to transform anxiety into confidence by equipping users with the tools to articulate their skills effectively and stand out in competitive job markets.
 
 The platform leverages **Large Language Models (LLMs)** to dynamically generate personalized interview questions and provide automated feedback. Proper error handling is critical for maintaining user trust, ensuring system stability, and facilitating rapid debugging. This document outlines the overarching goals, functional boundaries, and strategic direction of AceYourHireVue, serving as a foundational reference for all stakeholders.
 
