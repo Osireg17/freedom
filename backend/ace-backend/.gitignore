@@ -5,4 +5,5 @@ encore.gen.cue
 node_modules
 /encore.gen
 infra.config.json
-BUCKET_SECRET_ACCESS_KEY=REDACTED
+.secrets.local.cue
+.env.local

@@ -3,7 +3,7 @@ import { db } from '@/lib/db';
 import { interviews, interviewQuestions, interviewAnswers } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { notFound } from 'next/navigation';
-import { protectRoute } from '@/lib/actions/auth-actions';
+import { auth } from '@clerk/nextjs/server';
 import DeviceSelector from '@/components/interviews/device/device-selector';
 
 interface DeviceSetupPageProps {
@@ -13,14 +13,17 @@ interface DeviceSetupPageProps {
 }
 
 export default async function DeviceSetupPage({ params }: DeviceSetupPageProps) {
-    const user = await protectRoute();
+    const { userId } = await auth();
+    if (!userId) {
+        throw new Error('Not authenticated');
+    }
     const interviewId = params.interviewId;
 
     const interview = await db.query.interviews.findFirst({
         where: eq(interviews.id, interviewId),
     });
 
-    if (!interview || interview.userId !== user.id) {
+    if (!interview || interview.userId !== userId) {
         return notFound();
     }
 

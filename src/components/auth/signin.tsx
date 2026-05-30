@@ -1,8 +1,9 @@
+// src/components/auth/signin.tsx
 'use client';
 
 import { useState, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { createClient } from '@/lib/supabase/client';
+import { useSignIn } from '@clerk/nextjs';
 import { z } from 'zod';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -34,7 +35,7 @@ export default function SignIn() {
     const searchParams = useSearchParams();
     const [isLoading, setIsLoading] = useState(false);
     const { logError } = useErrorLogging();
-    const supabase = createClient();
+    const { isLoaded, signIn, setActive } = useSignIn();
 
     // Check if there's a redirect parameter
     const redirectTo = searchParams.get('redirect') || '/dashboard';
@@ -74,28 +75,28 @@ export default function SignIn() {
     }, [message]);
 
     const onSubmit = async (values: SignInFormValues) => {
+        if (!isLoaded) return;
         try {
             setIsLoading(true);
 
-            // Sign in with Supabase
-            const { error } = await supabase.auth.signInWithPassword({
-                email: values.email,
+            // Sign in with Clerk
+            const result = await signIn.create({
+                identifier: values.email,
                 password: values.password,
             });
 
-            if (error) {
-                toast.error(error.message);
-                return;
+            if (result.status === 'complete') {
+                await setActive({ session: result.createdSessionId });
+                // Show success message
+                toast.success('Signed in successfully');
+                // Use a hard navigation to ensure all auth state is properly refreshed
+                window.location.href = redirectTo;
+            } else {
+                toast.error('Sign in flow incomplete. Please check your credentials.');
             }
-
-            // Show success message
-            toast.success('Signed in successfully');
-
-            // Use a hard navigation to ensure all auth state is properly refreshed
-            window.location.href = redirectTo;
-        } catch (error) {
+        } catch (error: any) {
             logError(error, { action: 'signIn' });
-            toast.error('An error occurred during sign in. Please try again.');
+            toast.error(error.errors?.[0]?.message ?? error.message ?? 'An error occurred during sign in. Please try again.');
         } finally {
             setIsLoading(false);
         }

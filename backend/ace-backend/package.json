@@ -15,11 +15,13 @@
     "vitest": "^1.5.0"
   },
   "dependencies": {
+    "@clerk/backend": "^3.4.14",
     "dotenv": "^17.4.2",
     "drizzle-kit": "^0.31.10",
     "drizzle-orm": "^0.45.2",
     "encore.dev": "^1.57.5",
-    "pg": "^8.21.0"
+    "pg": "^8.21.0",
+    "svix": "^1.95.1"
   },
   "optionalDependencies": {
     "@rollup/rollup-linux-x64-gnu": "^4.13.0"

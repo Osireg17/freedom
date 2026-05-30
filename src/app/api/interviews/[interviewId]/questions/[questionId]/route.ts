@@ -3,7 +3,7 @@ import { db } from '@/lib/db';
 import { interviews, interviewQuestions } from '@/lib/db/schema';
 import { eq, and } from 'drizzle-orm';
 import { withAxiom } from '@/lib/axiom/server';
-import { getCurrentUser } from '@/lib/actions/auth-actions';
+import { auth } from '@clerk/nextjs/server';
 import {
   wrapDatabaseOperation,
   AuthenticationError,
@@ -22,8 +22,8 @@ export const GET = withAxiom(async (
   const { interviewId, questionId } = await params;
 
   // Get authenticated user
-  const user = await getCurrentUser();
-  if (!user) {
+  const { userId } = await auth();
+  if (!userId) {
     throw new AuthenticationError('User must be authenticated to access questions');
   }
 
@@ -42,7 +42,7 @@ export const GET = withAxiom(async (
   assertFound(interview, 'Interview', interviewId);
 
   // Check ownership
-  if (interview.userId !== user.id) {
+  if (interview.userId !== userId) {
     throw new AuthorizationError('You do not have permission to access this interview');
   }
 

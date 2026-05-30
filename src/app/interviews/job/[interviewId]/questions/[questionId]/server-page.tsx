@@ -3,7 +3,7 @@ import { db } from '@/lib/db';
 import { interviews, interviewQuestions, interviewAnswers } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { notFound, redirect } from 'next/navigation';
-import { protectRoute } from '@/lib/actions/auth-actions';
+import { auth } from '@clerk/nextjs/server';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
@@ -16,14 +16,17 @@ interface QuestionServerPageProps {
 
 export default async function QuestionServerPage({ interviewId, questionId }: QuestionServerPageProps) {
     // Protect this route
-    const user = await protectRoute();
+    const { userId } = await auth();
+    if (!userId) {
+        throw new Error('Not authenticated');
+    }
 
     // Get the interview
     const interview = await db.query.interviews.findFirst({
         where: eq(interviews.id, interviewId),
     });
 
-    if (!interview || interview.userId !== user.id) {
+    if (!interview || interview.userId !== userId) {
         return notFound();
     }
 

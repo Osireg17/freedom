@@ -1,11 +1,15 @@
 // src/components/dashboard/layout/dashboard-layout.tsx
 'use client';
 
-import { User } from '@supabase/supabase-js';
 import DashboardContent from './dashboard-content';
 
+export interface DashboardUser {
+    firstName: string | null;
+    lastName: string | null;
+}
+
 interface DashboardLayoutProps {
-    user: User;
+    user: DashboardUser;
     children?: React.ReactNode;
 }
 

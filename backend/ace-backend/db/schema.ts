@@ -16,7 +16,7 @@ export const companySizeCategoryEnum = pgEnum('company_size_category', ['startup
 
 // Users table - updated for Supabase Auth
 export const users = pgTable('users', {
-  id: uuid('id').primaryKey(),
+  id: text('id').primaryKey(),
   firstName: text('first_name').notNull(),
   lastName: text('last_name').notNull(),
   email: text('email').notNull(),
@@ -32,7 +32,7 @@ export const users = pgTable('users', {
 // Interviews table - remains the same
 export const interviews = pgTable('interviews', {
   id: uuid('id').primaryKey().default(sql`gen_random_uuid()`),
-  userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
+  userId: text('user_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
   interviewType: interviewTypeEnum('interview_type').notNull(),
   companyName: text('company_name'),
   jobPosition: text('job_position'),

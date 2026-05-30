@@ -6,15 +6,13 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Menu, X } from 'lucide-react';
-import { User } from '@supabase/supabase-js';
+import { useUser } from '@clerk/nextjs';
 import { AuthenticatedNavigation } from './auth-navigation';
 import { useMediaQuery } from '@/hooks/use-media-query';
-import { getCurrentUser } from '@/lib/actions/auth-actions';
 
 export function Header() {
     const [isMenuOpen, setIsMenuOpen] = useState(false);
-    const [user, setUser] = useState<User | null>(null);
-    const [isLoading, setIsLoading] = useState(true);
+    const { user, isLoaded } = useUser();
     const pathname = usePathname();
     const isMobile = useMediaQuery("(max-width: 1024px)");
 
@@ -29,22 +27,6 @@ export function Header() {
             pathname.startsWith('/analytics') ||
             pathname.startsWith('/profile') ||
             pathname.startsWith('/settings'));
-
-    useEffect(() => {
-        async function getUser() {
-            setIsLoading(true);
-            try {
-                const user = await getCurrentUser();
-                setUser(user);
-            } catch (error) {
-                console.error('Error getting user:', error);
-            } finally {
-                setIsLoading(false);
-            }
-        }
-
-        getUser();
-    }, []);
 
     // Close mobile menu when route changes
     useEffect(() => {
@@ -70,9 +52,9 @@ export function Header() {
                     </Link>
                 </div>
 
-                {!isLoading && user ? (
+                {isLoaded && user ? (
                     <AuthenticatedNavigation
-                        username={user.user_metadata?.first_name}
+                        username={user.firstName || undefined}
                         isMobile={isMobile}
                     />
                 ) : (
@@ -105,7 +87,7 @@ export function Header() {
 
                         {/* Authentication Buttons - Desktop */}
                         <div className="hidden md:flex items-center gap-4">
-                            {!isLoading && (
+                            {isLoaded && (
                                 <>
                                     <Button
                                         variant="outline"
@@ -174,7 +156,7 @@ export function Header() {
                             Contact
                         </Link>
                         <div className="flex flex-col space-y-2 pt-2">
-                            {!isLoading && (
+                            {isLoaded && (
                                 <>
                                     <Button
                                         variant="outline"

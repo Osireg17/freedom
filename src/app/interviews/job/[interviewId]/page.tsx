@@ -4,7 +4,7 @@ import { db } from '@/lib/db';
 import { interviews, interviewQuestions, interviewAnswers } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { notFound } from 'next/navigation';
-import { protectRoute } from '@/lib/actions/auth-actions';
+import { auth } from '@clerk/nextjs/server';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
@@ -21,7 +21,10 @@ export async function generateMetadata() {
 
 export default async function InterviewPage({ params }: { params: Promise<{ interviewId: string }> }) {
     // Protect this route
-    const user = await protectRoute();
+    const { userId } = await auth();
+    if (!userId) {
+        throw new Error('Not authenticated');
+    }
 
     const resolvedParams = await params;
     const interviewId = resolvedParams.interviewId;
@@ -36,7 +39,7 @@ export default async function InterviewPage({ params }: { params: Promise<{ inte
     }
 
     // Check if the interview belongs to the user
-    if (interview.userId !== user.id) {
+    if (interview.userId !== userId) {
         return notFound();
     }
 

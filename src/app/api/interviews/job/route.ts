@@ -6,7 +6,7 @@ import { db } from '@/lib/db';
 import { interviews } from '@/lib/db/schema';
 import { withAxiom } from '@/lib/axiom/server';
 import { generateJobInterviewQuestionsJob } from '../../../../../trigger/interviews/job';
-import { getCurrentUser } from '@/lib/actions/auth-actions';
+import { auth } from '@clerk/nextjs/server';
 import { v4 as uuidv4 } from 'uuid';
 import {
   wrapDatabaseOperation,
@@ -29,8 +29,8 @@ type JobInterviewRequest = z.infer<typeof jobInterviewRequestSchema>;
 
 export const POST = withAxiom(async (req: NextRequest) => {
   // Get authenticated user
-  const user = await getCurrentUser();
-  if (!user) {
+  const { userId } = await auth();
+  if (!userId) {
     throw new AuthenticationError('User must be authenticated to create interviews');
   }
 
@@ -46,7 +46,7 @@ export const POST = withAxiom(async (req: NextRequest) => {
   await wrapDatabaseOperation(
     () => db.insert(interviews).values({
       id: interviewId,
-      userId: user.id,
+      userId: userId,
       interviewType: 'ai',
       companyName,
       jobPosition: jobTitle,
