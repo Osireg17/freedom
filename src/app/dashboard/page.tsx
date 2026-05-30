@@ -1,8 +1,9 @@
 // src/app/dashboard/page.tsx
 import { Metadata } from 'next';
-import { auth, currentUser } from '@clerk/nextjs/server';
+import { auth } from '@clerk/nextjs/server';
 import { redirect } from 'next/navigation';
 import DashboardLayout from '@/components/dashboard/layout/dashboard-layout';
+import Client, { Local } from '@/lib/client';
 
 export const metadata: Metadata = {
     title: 'Dashboard - AceYourHireVue',
@@ -10,12 +11,22 @@ export const metadata: Metadata = {
 };
 
 export default async function DashboardPage() {
-    const authResult = await auth();
-    console.log('[dashboard] auth result:', JSON.stringify(authResult));
-    const { userId } = authResult;
-    if (!userId) redirect('/sign-in');
+    const { userId, getToken } = await auth();
+    if (!userId) {
+        redirect('/sign-in');
+    }
 
-    const clerkUser = await currentUser();
+    const client = new Client(Local, {
+        auth: async () => ({ authorization: `Bearer ${await getToken()}` })
+    });
 
-    return <DashboardLayout user={{ firstName: clerkUser?.firstName ?? null, lastName: clerkUser?.lastName ?? null }} />;
+    try {
+        const user = await client.users.getUser(userId);
+        return (
+            <DashboardLayout user={{ firstName: user.firstName, lastName: user.lastName }} />
+        );
+    } catch (error) {
+        console.error('Failed to fetch user data:', error);
+        return <div>Error fetching user data</div>;
+    }
 }
