@@ -1,6 +1,7 @@
 // src/app/dashboard/layout.tsx
 import { Metadata } from 'next';
-import { protectRoute } from '@/lib/actions/auth-actions';
+import { auth } from '@clerk/nextjs/server';
+import { redirect } from 'next/navigation';
 
 export const metadata: Metadata = {
     title: 'Dashboard - AceYourHireVue',
@@ -12,10 +13,11 @@ export default async function DashboardLayout({
 }: {
     children: React.ReactNode;
 }) {
-    // This will redirect to sign-in if the user is not authenticated
-    await protectRoute();
+    const authResult = await auth();
+    console.log('[dashboard layout] auth result:', JSON.stringify(authResult));
+    const { userId } = authResult;
+    if (!userId) redirect('/sign-in');
 
-    // The container is minimal now as the actual layout is handled by the DashboardLayout component
     return (
         <div className='container py-8 max-w-4xl mx-auto' data-testid="dashboard-container">
             {children}

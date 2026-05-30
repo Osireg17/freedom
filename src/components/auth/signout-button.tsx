@@ -5,7 +5,7 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { LogOut } from 'lucide-react';
 import { useErrorLogging } from '@/hooks/use-error-logging';
-import { createClient } from '@/lib/supabase/client';
+import { useClerk } from '@clerk/nextjs';
 import { toast } from 'sonner';
 
 interface SignOutButtonProps {
@@ -25,25 +25,17 @@ export function SignOutButton({
 }: SignOutButtonProps) {
     const [isLoading, setIsLoading] = useState(false);
     const { logError } = useErrorLogging();
-    const supabase = createClient();
+    const { signOut } = useClerk();
 
     const handleSignOut = async () => {
         try {
             setIsLoading(true);
 
-            // Sign out using the Supabase client
-            const { error } = await supabase.auth.signOut();
-
-            if (error) {
-                throw error;
-            }
+            // Sign out using the Clerk client
+            await signOut({ redirectUrl: '/' });
 
             // Show success message
             toast.success('Signed out successfully');
-
-            // Force a hard navigation to the home page instead of using router.push
-            // This will cause a full page reload and ensure all auth state is refreshed
-            window.location.href = '/';
         } catch (error) {
             logError(error, { action: 'signOutButton' });
             toast.error('Failed to sign out. Please try again.');

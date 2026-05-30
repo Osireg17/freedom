@@ -1,6 +1,6 @@
 // src/app/interviews/job/page.tsx
 import { Metadata } from 'next';
-import { protectRoute } from '@/lib/actions/auth-actions';
+import { auth } from '@clerk/nextjs/server';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 import { ChevronLeft, Briefcase, Building, Clock, ListChecks, HelpCircle } from 'lucide-react';
@@ -13,7 +13,10 @@ export const metadata: Metadata = {
 
 export default async function JobInterviewPage() {
     // Protect this route - only authenticated users can access it
-    await protectRoute();
+    const { userId } = await auth();
+    if (!userId) {
+        throw new Error('Not authenticated');
+    }
 
     return (
         <div className="container py-8 max-w-4xl mx-auto" data-testid="job-interview-page">

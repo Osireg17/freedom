@@ -1,6 +1,6 @@
 // src/app/dashboard/interviews/resume/page.tsx
 import { Metadata } from 'next';
-import { protectRoute } from '@/lib/actions/auth-actions';
+import { auth } from '@clerk/nextjs/server';
 import ResumeInterviewForm from '@/components/interviews/resume/resume-interview-form';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
@@ -13,7 +13,10 @@ export const metadata: Metadata = {
 
 export default async function ResumeInterviewPage() {
     // Protect this route - only authenticated users can access it
-    await protectRoute();
+    const { userId } = await auth();
+    if (!userId) {
+        throw new Error('Not authenticated');
+    }
 
     return (
         <div className="container py-8 max-w-3xl mx-auto" data-testid="resume-interview-page">

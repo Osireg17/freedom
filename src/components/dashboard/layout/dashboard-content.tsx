@@ -1,7 +1,7 @@
 // src/components/dashboard/layout/dashboard-content.tsx
 'use client';
 
-import { User } from '@supabase/supabase-js';
+import { DashboardUser } from './dashboard-layout';
 
 import { StreakPanel } from '../panels/streak-panel';
 import { SubscriptionPanel } from '../panels/subscription-panel';
@@ -14,7 +14,7 @@ import { DailyChallenge } from '../panels/daily-challenge';
 
 
 interface DashboardContentProps {
-    user: User;
+    user: DashboardUser;
     children?: React.ReactNode;
 }
 
@@ -101,8 +101,8 @@ const MOCK_DATA = {
 
 
 export default function DashboardContent({ user, children }: DashboardContentProps) {
-    const firstName = user.user_metadata?.first_name || 'User';
-    const lastName = user.user_metadata?.last_name || 'User';
+    const firstName = user.firstName || 'User';
+    const lastName = user.lastName || 'User';
 
 
     // If there are children, render them instead of the default dashboard

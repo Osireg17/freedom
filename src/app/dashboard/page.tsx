@@ -1,6 +1,7 @@
 // src/app/dashboard/page.tsx
 import { Metadata } from 'next';
-import { protectRoute } from '@/lib/actions/auth-actions';
+import { auth, currentUser } from '@clerk/nextjs/server';
+import { redirect } from 'next/navigation';
 import DashboardLayout from '@/components/dashboard/layout/dashboard-layout';
 
 export const metadata: Metadata = {
@@ -9,8 +10,12 @@ export const metadata: Metadata = {
 };
 
 export default async function DashboardPage() {
-    // This will redirect to sign-in if the user is not authenticated
-    const user = await protectRoute();
+    const authResult = await auth();
+    console.log('[dashboard] auth result:', JSON.stringify(authResult));
+    const { userId } = authResult;
+    if (!userId) redirect('/sign-in');
 
-    return <DashboardLayout user={user} />;
+    const clerkUser = await currentUser();
+
+    return <DashboardLayout user={{ firstName: clerkUser?.firstName ?? null, lastName: clerkUser?.lastName ?? null }} />;
 }

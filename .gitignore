@@ -49,3 +49,4 @@ next-env.d.ts
 .vscode/
 
 plans/
+claude_docs/

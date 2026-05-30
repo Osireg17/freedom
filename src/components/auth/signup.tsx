@@ -1,8 +1,7 @@
-// src/components/auth/signup.tsx
 'use client'
 import { useState } from "react"
+import { useSignUp, useClerk } from "@clerk/nextjs"
 import { useRouter } from "next/navigation"
-import { createClient } from "@/lib/supabase/client"
 import { z } from "zod"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
@@ -14,9 +13,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
 import { Card, CardContent, CardFooter } from "@/components/ui/card"
-import { useErrorLogging } from "@/hooks/use-error-logging"
 
-// Updated sign-up form schema with firstName and lastName
 const signUpSchema = z
     .object({
         firstName: z
@@ -27,6 +24,11 @@ const signUpSchema = z
             .string()
             .min(2, { message: "Last name must be at least 2 characters" })
             .max(50, { message: "Last name must be less than 50 characters" }),
+        username: z
+            .string()
+            .min(3, { message: "Username must be at least 3 characters" })
+            .max(30, { message: "Username must be less than 30 characters" })
+            .regex(/^[a-zA-Z0-9_]+$/, { message: "Username can only contain letters, numbers, and underscores" }),
         email: z.string().email({ message: "Please enter a valid email address" }),
         password: z
             .string()
@@ -44,18 +46,21 @@ const signUpSchema = z
 type SignUpFormValues = z.infer<typeof signUpSchema>
 
 export default function SignUp() {
+    const { signUp } = useSignUp()
+    const { setActive } = useClerk()
     const router = useRouter()
     const [isLoading, setIsLoading] = useState(false)
     const [showPassword, setShowPassword] = useState(false)
     const [showConfirmPassword, setShowConfirmPassword] = useState(false)
-    const { logError } = useErrorLogging()
-    const supabase = createClient()
+    const [verifying, setVerifying] = useState(false)
+    const [code, setCode] = useState("")
 
     const form = useForm<SignUpFormValues>({
         resolver: zodResolver(signUpSchema),
         defaultValues: {
             firstName: "",
             lastName: "",
+            username: "",
             email: "",
             password: "",
             confirmPassword: "",
@@ -73,41 +78,86 @@ export default function SignUp() {
     ]
 
     const onSubmit = async (values: SignUpFormValues) => {
+        if (!signUp) return
         try {
-            setIsLoading(true);
-
-            // Sign up with Supabase - now including firstName and lastName in metadata
-            const { data, error } = await supabase.auth.signUp({
-                email: values.email,
+            setIsLoading(true)
+            const { error } = await signUp.password({
+                firstName: values.firstName,
+                lastName: values.lastName,
+                username: values.username,
+                emailAddress: values.email,
                 password: values.password,
-                options: {
-                    emailRedirectTo: `${window.location.origin}/auth/callback`,
-                    data: {
-                        first_name: values.firstName,
-                        last_name: values.lastName,
-                        email_confirmed: false,
-                    },
-                },
-            });
-
+            })
             if (error) {
-                toast.error(error.message);
-                return;
+                toast.error(error.message)
+                return
             }
-
-            // Success - redirect to verification page
-            if (data?.user) {
-                toast.success('Account created successfully! Please verify your email.');
-                // Use the router to navigate to the verification page
-                router.push(`/verify-email?email=${encodeURIComponent(values.email)}&type=signup`);
-            }
-        } catch (error) {
-            logError(error, { action: "signUp" });
-            toast.error('An error occurred during sign up. Please try again.');
+            console.log('[onSubmit] signUp.status after password():', signUp.status)
+            console.log('[onSubmit] signUp.verifications:', JSON.stringify(signUp.verifications, null, 2))
+            console.log('[onSubmit] signUp.missingFields:', signUp.missingFields)
+            await signUp.verifications.sendEmailCode()
+            setVerifying(true)
+        } catch (err: any) {
+            toast.error(err?.message ?? "An error occurred during sign up. Please try again.")
         } finally {
-            setIsLoading(false);
+            setIsLoading(false)
         }
-    };
+    }
+
+    const onVerify = async () => {
+        if (!signUp) return
+        try {
+            setIsLoading(true)
+            const verifyResult = await signUp.verifications.verifyEmailCode({ code })
+            console.log('[onVerify] verifyEmailCode result:', JSON.stringify(verifyResult, null, 2))
+            console.log('[onVerify] signUp.status after verify:', signUp.status)
+            console.log('[onVerify] signUp.createdSessionId:', signUp.createdSessionId)
+            if (verifyResult.error) {
+                toast.error(verifyResult.error.message)
+                return
+            }
+            console.log('[onVerify] calling setActive, sessionId:', signUp.createdSessionId)
+            await setActive({ session: signUp.createdSessionId })
+            console.log('[onVerify] setActive complete, pushing to dashboard')
+            router.push('/dashboard')
+        } catch (err: any) {
+            toast.error(err?.message ?? "Verification failed. Please try again.")
+        } finally {
+            setIsLoading(false)
+        }
+    }
+
+    if (verifying) {
+        return (
+            <div data-testid="verify-email-container">
+                <Card className="border-none shadow-none sm:border sm:shadow">
+                    <CardContent className="p-0 sm:p-6 space-y-4">
+                        <div className="flex flex-col space-y-2 text-center">
+                            <Mail className="mx-auto h-8 w-8 text-muted-foreground" />
+                            <p className="text-sm text-muted-foreground">
+                                We sent a verification code to your email. Enter it below.
+                            </p>
+                        </div>
+                        <Input
+                            placeholder="Enter verification code"
+                            value={code}
+                            onChange={(e) => setCode(e.target.value)}
+                            data-testid="verify-code-input"
+                        />
+                        <Button
+                            className="w-full"
+                            size="lg"
+                            onClick={onVerify}
+                            disabled={isLoading || !code}
+                            data-testid="verify-submit-button"
+                        >
+                            {isLoading ? "Verifying..." : "Verify email"}
+                        </Button>
+                    </CardContent>
+                </Card>
+            </div>
+        )
+    }
 
     return (
         <div data-testid="signup-form-container">
@@ -161,6 +211,28 @@ export default function SignUp() {
                                     )}
                                 />
                             </div>
+                            <FormField
+                                control={form.control}
+                                name="username"
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel>Username</FormLabel>
+                                        <FormControl>
+                                            <div className="relative">
+                                                <User className="absolute left-3 top-2.5 h-5 w-5 text-muted-foreground" />
+                                                <Input
+                                                    placeholder="johndoe"
+                                                    className="pl-10"
+                                                    {...field}
+                                                    data-testid="signup-username-input"
+                                                    aria-label="Username"
+                                                />
+                                            </div>
+                                        </FormControl>
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
                             <FormField
                                 control={form.control}
                                 name="email"
@@ -218,7 +290,6 @@ export default function SignUp() {
                                 )}
                             />
 
-                            {/* Password requirements */}
                             <div className="space-y-2 rounded-md bg-muted/50 p-3">
                                 <p className="text-xs font-medium text-muted-foreground">Password requirements:</p>
                                 <ul className="grid grid-cols-1 gap-1 sm:grid-cols-2">

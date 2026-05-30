@@ -8,6 +8,13 @@
       "when": 1780087075758,
       "tag": "0000_neat_lady_mastermind",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1780138638915,
+      "tag": "0001_curly_clea",
+      "breakpoints": true
     }
   ]
 }

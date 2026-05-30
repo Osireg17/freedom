@@ -1,6 +1,7 @@
 import { api, APIError } from "encore.dev/api";
 import { secret } from "encore.dev/config";
 import { Webhook } from "svix";
+import log from "encore.dev/log";
 import { db } from "../db/db";
 import { users } from "../db/schema";
 import { eq } from "drizzle-orm";
@@ -40,14 +41,21 @@ export const clerkWebhook = api.raw(
 
     const { type, data } = payload;
 
+    log.info("webhook received", { type, userId: data.id });
+
     if (type === "user.created" || type === "user.updated") {
       const email = data.email_addresses?.[0]?.email_address;
+      const emailVerified = data.email_addresses?.[0]?.verification?.status;
+      log.info("user event", { userId: data.id, email, emailVerified, username: data.username });
+
       if (!email) {
+        log.error(null, "no email address in payload", { data });
         throw APIError.invalidArgument("no email address in payload");
       }
 
       const { username } = data;
       if (!username) {
+        log.error(null, "username missing in payload", { data });
         throw APIError.invalidArgument("username is required");
       }
 
