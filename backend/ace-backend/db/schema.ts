@@ -41,6 +41,7 @@ export const interviews = pgTable('interviews', {
   resumeFilename: text('resume_filename'),
   timeToAnswer: integer('time_to_answer').notNull(),
   status: interviewStatusEnum('status').default('not_started').notNull(),
+  triggerRunId: text('trigger_run_id'),
   lastQuestionIndex: integer('last_question_index').default(0),
   originalInterviewId: uuid('original_interview_id'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
