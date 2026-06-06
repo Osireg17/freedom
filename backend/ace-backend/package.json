@@ -16,12 +16,15 @@
   },
   "dependencies": {
     "@clerk/backend": "^3.4.14",
+    "@supabase/supabase-js": "^2.107.0",
+    "@trigger.dev/sdk": "^4.4.6",
     "dotenv": "^17.4.2",
     "drizzle-kit": "^0.31.10",
     "drizzle-orm": "^0.45.2",
     "encore.dev": "^1.57.5",
     "pg": "^8.21.0",
     "svix": "^1.95.1",
+    "uuid": "^14.0.0",
     "zod": "^4.4.3"
   },
   "optionalDependencies": {
