@@ -7,6 +7,8 @@ import { useErrorLogging } from '@/hooks/use-error-logging'
 import { Card } from '@/components/ui/card'
 import { Eye, EyeOff, Loader2 } from 'lucide-react'
 import dynamic from 'next/dynamic';
+import { useAuth } from '@clerk/nextjs'
+import Client, { Local } from '@/lib/client'
 
 // Define proper types for our question data
 interface QuestionData {
@@ -38,6 +40,7 @@ export default function QuestionAnswerClient() {
     const params = useParams()
     const router = useRouter()
     const { logError } = useErrorLogging()
+    const { getToken } = useAuth()
 
     const [question, setQuestion] = useState<QuestionData | null>(null)
     const [loading, setLoading] = useState(true)
@@ -51,8 +54,8 @@ export default function QuestionAnswerClient() {
 
         try {
             setLoading(true)
-            const interviewId = params.interviewId
-            const questionId = params.questionId
+            const interviewId = params.interviewId as string
+            const questionId = params.questionId as string
 
             if (!interviewId || !questionId) {
                 setFetchError('Missing interview or question ID')
@@ -63,17 +66,11 @@ export default function QuestionAnswerClient() {
             // Log the params for debugging
             console.log('Fetching question with params:', { interviewId, questionId });
 
-            const response = await fetch(
-                `/api/interviews/${interviewId}/questions/${questionId}?t=${Date.now()}`,
-                { cache: 'default' }
-            )
+            const client = new Client(Local, {
+                auth: async () => ({ authorization: `Bearer ${await getToken()}` })
+            });
 
-            if (!response.ok) {
-                const errorData = await response.json().catch(() => ({}))
-                throw new Error(`Failed to fetch question: ${response.status}. ${errorData?.error?.message || ''}`)
-            }
-
-            const data = await response.json()
+            const data = await client.interviews.getInterviewQuestionApi(interviewId, questionId);
             setQuestion(data)
             setFetchComplete(true)
         } catch (error) {

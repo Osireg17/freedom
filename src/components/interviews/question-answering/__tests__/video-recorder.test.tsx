@@ -9,6 +9,30 @@ jest.mock('next/navigation', () => ({
     useRouter: () => ({ push: jest.fn() })
 }))
 
+jest.mock('@clerk/nextjs', () => {
+    const actual = jest.requireActual('@clerk/nextjs');
+    return {
+        ...actual,
+        useAuth: () => ({
+            getToken: jest.fn().mockResolvedValue('mock-token'),
+        }),
+    };
+})
+
+jest.mock('@/lib/client', () => {
+    return {
+        __esModule: true,
+        default: jest.fn().mockImplementation(() => {
+            return {
+                responses: {
+                    getResponseApi: jest.fn(),
+                },
+            };
+        }),
+        Local: 'http://localhost:4000',
+    };
+})
+
 jest.mock('@/hooks/use-error-logging', () => ({
     useErrorLogging: () => ({ logError: jest.fn() })
 }))
@@ -17,12 +41,20 @@ const mockGetSelectedCamera = jest.fn(() => 'camera1')
 const mockGetSelectedMicrophone = jest.fn(() => 'mic1')
 const mockHasValidDeviceSettings = jest.fn(() => false)
 const mockGetActiveMediaStream = jest.fn(() => null)
+const mockStoreDeviceSettings = jest.fn()
+const mockSetActiveMediaStream = jest.fn()
+const mockClearDeviceSettings = jest.fn()
+const mockClearActiveMediaStream = jest.fn()
 
 jest.mock('@/lib/device-session', () => ({
     getSelectedCamera: () => mockGetSelectedCamera(),
     getSelectedMicrophone: () => mockGetSelectedMicrophone(),
     hasValidDeviceSettings: () => mockHasValidDeviceSettings(),
-    getActiveMediaStream: () => mockGetActiveMediaStream()
+    getActiveMediaStream: () => mockGetActiveMediaStream(),
+    storeDeviceSettings: (...args: any[]) => mockStoreDeviceSettings(...args),
+    setActiveMediaStream: (...args: any[]) => mockSetActiveMediaStream(...args),
+    clearDeviceSettings: (...args: any[]) => mockClearDeviceSettings(...args),
+    clearActiveMediaStream: (...args: any[]) => mockClearActiveMediaStream(...args),
 }))
 
 const toastError = jest.fn()
@@ -34,11 +66,13 @@ jest.mock('sonner', () => ({
     }
 }))
 
-jest.mock('lucide-react', () => ({
-    Camera: () => <div data-testid="icon-camera" />,
-    Loader2: () => <div data-testid="icon-loader" />,
-    VideoOff: () => <div data-testid="icon-videooff" />
-}))
+jest.mock('lucide-react', () => {
+    return new Proxy({}, {
+        get: (target, prop) => {
+            return (props: any) => <div data-testid={`icon-${String(prop).toLowerCase()}`} {...props} />;
+        }
+    });
+})
 
 jest.mock('@/components/ui/button', () => ({
     Button: ({ children, ...props }: any) => <button {...props}>{children}</button>
@@ -49,13 +83,26 @@ jest.mock('@/components/ui/progress', () => ({
 }))
 
 // MediaStream mock (if not present)
-class MockTrack { stop = jest.fn() }
+class MockTrack {
+    stop = jest.fn()
+    getSettings = jest.fn(() => ({ deviceId: 'mock-device-id' }))
+}
 class MockMediaStream {
     private tracks: any[]
     constructor() { this.tracks = [new MockTrack(), new MockTrack()] }
     getTracks() { return this.tracks }
+    getVideoTracks() { return [this.tracks[0]] }
+    getAudioTracks() { return [this.tracks[1]] }
 }
 ; (global as any).MediaStream = (global as any).MediaStream || MockMediaStream
+
+Object.defineProperty(global.navigator, 'mediaDevices', {
+    writable: true,
+    value: {
+        getUserMedia: jest.fn().mockResolvedValue(new MockMediaStream()),
+        enumerateDevices: jest.fn().mockResolvedValue([]),
+    },
+});
 
 // MediaRecorder mock
 class MockMediaRecorder {
@@ -84,14 +131,35 @@ class MockMediaRecorder {
 ; (global as any).MediaRecorder = MockMediaRecorder
 
 // URL mocks
+const { URL: NodeURL, URLSearchParams: NodeURLSearchParams } = require('url');
 const revokeSpy = jest.fn()
 const createSpy = jest.fn(() => 'blob:mock-video')
+
+NodeURL.createObjectURL = createSpy
+NodeURL.revokeObjectURL = revokeSpy
+
 Object.defineProperty(global, 'URL', {
-    value: {
-        createObjectURL: createSpy,
-        revokeObjectURL: revokeSpy
-    }
+    value: NodeURL,
+    configurable: true,
+    writable: true
 })
+Object.defineProperty(global, 'URLSearchParams', {
+    value: NodeURLSearchParams,
+    configurable: true,
+    writable: true
+})
+if (typeof window !== 'undefined') {
+    Object.defineProperty(window, 'URL', {
+        value: NodeURL,
+        configurable: true,
+        writable: true
+    })
+    Object.defineProperty(window, 'URLSearchParams', {
+        value: NodeURLSearchParams,
+        configurable: true,
+        writable: true
+    })
+}
 
 // react-webcam mock
 jest.mock('react-webcam', () => {
@@ -120,10 +188,13 @@ afterEach(() => {
 
 // Helper: drive component to 'reviewing' state with a finished recording
 async function driveToReview() {
+    mockHasValidDeviceSettings.mockReturnValue(true)
     render(
         <VideoRecorder
             interviewId="int1"
             questionId="q1"
+            questionNumber={1}
+            totalQuestions={5}
             showFace={true}
             prepTime={5}
             maxResponseTime={10}
@@ -134,6 +205,10 @@ async function driveToReview() {
     await act(async () => {
         jest.advanceTimersByTime(0)
     })
+
+    // Click "Start Interview" button on the intro modal
+    const startBtn = await screen.findByTestId('start-interview-button')
+    fireEvent.click(startBtn)
 
     // Autostart prep after 200ms (since selected devices exist)
     await act(async () => {
@@ -247,6 +322,8 @@ describe('Device Setup Modal Integration', () => {
             <VideoRecorder
                 interviewId="test-interview"
                 questionId="test-question"
+                questionNumber={1}
+                totalQuestions={5}
                 showFace={true}
                 prepTime={30}
                 maxResponseTime={120}
@@ -268,6 +345,8 @@ describe('Device Setup Modal Integration', () => {
             <VideoRecorder
                 interviewId="test-interview"
                 questionId="test-question"
+                questionNumber={1}
+                totalQuestions={5}
                 showFace={true}
                 prepTime={30}
                 maxResponseTime={120}
@@ -291,6 +370,8 @@ describe('Device Setup Modal Integration', () => {
             <VideoRecorder
                 interviewId="test-interview"
                 questionId="test-question"
+                questionNumber={1}
+                totalQuestions={5}
                 showFace={true}
                 prepTime={30}
                 maxResponseTime={120}
@@ -323,4 +404,38 @@ describe('Device Setup Modal Integration', () => {
             expect(screen.getByText('Preparation Time')).toBeInTheDocument()
         })
     })
+
+    test('submits raw binary video response successfully', async () => {
+        global.fetch = jest.fn().mockImplementation(() =>
+            Promise.resolve({
+                ok: true,
+                json: () => Promise.resolve({ success: true }),
+            } as any)
+        );
+
+        await driveToReview();
+
+        const submitBtn = screen.getByTestId('submit-button');
+        await act(async () => {
+            fireEvent.click(submitBtn);
+        });
+
+        expect(global.fetch).toHaveBeenCalledWith(
+            expect.stringContaining('/interviews/int1/questions/q1/response?responseTimeMs='),
+            expect.objectContaining({
+                method: 'POST',
+                headers: expect.objectContaining({
+                    'Authorization': 'Bearer mock-token',
+                    'Content-Type': 'video/webm',
+                }),
+                body: expect.any(Blob),
+            })
+        );
+
+        await waitFor(() => {
+            expect(toastSuccess).toHaveBeenCalledWith('Response submitted!');
+        });
+
+        delete (global as any).fetch;
+    });
 })

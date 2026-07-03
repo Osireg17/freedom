@@ -32,7 +32,8 @@ const BROWSER = typeof globalThis === "object" && ("window" in globalThis);
  * Client is an API client for the 522uq Encore application.
  */
 export default class Client {
-    public readonly hello: hello.ServiceClient
+    public readonly interviews: interviews.ServiceClient
+    public readonly responses: responses.ServiceClient
     public readonly users: users.ServiceClient
     private readonly options: ClientOptions
     private readonly target: string
@@ -48,7 +49,8 @@ export default class Client {
         this.target = target
         this.options = options ?? {}
         const base = new BaseClient(this.target, this.options)
-        this.hello = new hello.ServiceClient(base)
+        this.interviews = new interviews.ServiceClient(base)
+        this.responses = new responses.ServiceClient(base)
         this.users = new users.ServiceClient(base)
     }
 
@@ -93,12 +95,39 @@ export namespace auth {
     }
 }
 
-/**
- * hello service responds to requests with a personalized greeting.
- */
-export namespace hello {
-    export interface Response {
-        message: string
+export namespace interviews {
+    export interface InterviewQuestionResponse {
+        id: string
+        interviewId: string
+        questionNumber: number
+        questionText: string
+        questionType: string
+        timeToAnswer: number
+        prepTime: number
+        totalQuestions: number
+    }
+
+    export interface InterviewStatusResponse {
+        interviewId: string
+        status: string
+        message?: string
+        questionsCount?: number
+        triggerDevRunStatus?: string
+    }
+
+    export interface JobInterviewRequest {
+        jobTitle: string
+        companyName: string
+        jobDescription: string
+        yearsExperience: string
+        timeToAnswer: string
+        prepTime: string
+    }
+
+    export interface JobInterviewResponse {
+        interviewId: string
+        runId: string
+        status: string
     }
 
     export class ServiceClient {
@@ -106,24 +135,62 @@ export namespace hello {
 
         constructor(baseClient: BaseClient) {
             this.baseClient = baseClient
-            this.get = this.get.bind(this)
-            this.index = this.index.bind(this)
+            this.createInterviewApi = this.createInterviewApi.bind(this)
+            this.getInterviewQuestionApi = this.getInterviewQuestionApi.bind(this)
+            this.getInterviewStatusApi = this.getInterviewStatusApi.bind(this)
         }
 
-        /**
-         * Returns a personalized greeting.
-         */
-        public async get(name: string): Promise<Response> {
+        public async createInterviewApi(params: JobInterviewRequest): Promise<JobInterviewResponse> {
             // Now make the actual call to the API
-            const resp = await this.baseClient.callTypedAPI("GET", `/hello/${encodeURIComponent(name)}`)
-            return await resp.json() as Response
+            const resp = await this.baseClient.callTypedAPI("POST", `/interviews/job`, JSON.stringify(params))
+            return await resp.json() as JobInterviewResponse
         }
 
         /**
-         * Landing page with usage instructions.
+         * endpoint: /interviews/:id/questions/:qid, fetches a single question for the recording page
          */
-        public async index(method: "GET", body?: RequestInit["body"], options?: CallParameters): Promise<globalThis.Response> {
-            return this.baseClient.callAPI(method, `/`, body, options)
+        public async getInterviewQuestionApi(interviewId: string, questionId: string): Promise<InterviewQuestionResponse> {
+            // Now make the actual call to the API
+            const resp = await this.baseClient.callTypedAPI("GET", `/interviews/${encodeURIComponent(interviewId)}/questions/${encodeURIComponent(questionId)}`)
+            return await resp.json() as InterviewQuestionResponse
+        }
+
+        public async getInterviewStatusApi(interviewId: string): Promise<InterviewStatusResponse> {
+            // Now make the actual call to the API
+            const resp = await this.baseClient.callTypedAPI("GET", `/interviews/${encodeURIComponent(interviewId)}/status`)
+            return await resp.json() as InterviewStatusResponse
+        }
+    }
+}
+
+export namespace responses {
+    export interface UserResponseRequest {
+        videoResponseBase64: string
+        responseTimeMs: number
+        redoAttemptNumber?: number
+    }
+
+    export interface UserResponseResponse {
+        success: boolean
+        responseId: string
+        status: string
+        message: string
+        runId: string
+        audioUrl?: string
+    }
+
+    export class ServiceClient {
+        private baseClient: BaseClient
+
+        constructor(baseClient: BaseClient) {
+            this.baseClient = baseClient
+            this.getResponseApi = this.getResponseApi.bind(this)
+        }
+
+        public async getResponseApi(interviewId: string, questionId: string, params: UserResponseRequest): Promise<UserResponseResponse> {
+            // Now make the actual call to the API
+            const resp = await this.baseClient.callTypedAPI("POST", `/interviews/${encodeURIComponent(interviewId)}/questions/${encodeURIComponent(questionId)}/response`, JSON.stringify(params))
+            return await resp.json() as UserResponseResponse
         }
     }
 }
@@ -165,7 +232,7 @@ export namespace users {
 function encodeQuery(parts: Record<string, string | string[]>): string {
     const pairs: string[] = []
     for (const key in parts) {
-        const val = (Array.isArray(parts[key]) ?  parts[key] : [parts[key]]) as string[]
+        const val = (Array.isArray(parts[key]) ? parts[key] : [parts[key]]) as string[]
         for (const v of val) {
             pairs.push(`${key}=${encodeURIComponent(v)}`)
         }
@@ -188,9 +255,9 @@ function makeRecord<K extends string | number | symbol, V>(record: Record<K, V |
 function encodeWebSocketHeaders(headers: Record<string, string>) {
     // url safe, no pad
     const base64encoded = btoa(JSON.stringify(headers))
-      .replaceAll("=", "")
-      .replaceAll("+", "-")
-      .replaceAll("/", "_");
+        .replaceAll("=", "")
+        .replaceAll("+", "-")
+        .replaceAll("/", "_");
     return "encore.dev.headers." + base64encoded;
 }
 
@@ -366,14 +433,14 @@ type CallParameters = Omit<RequestInit, "method" | "body" | "headers"> & {
 
 // AuthDataGenerator is a function that returns a new instance of the authentication data required by this API
 export type AuthDataGenerator = () =>
-  | auth.AuthParams
-  | Promise<auth.AuthParams | undefined>
-  | undefined;
+    | auth.AuthParams
+    | Promise<auth.AuthParams | undefined>
+    | undefined;
 
 // A fetcher is the prototype for the inbuilt Fetch function
 export type Fetcher = typeof fetch;
 
-const boundFetch = fetch.bind(this);
+const boundFetch = typeof fetch !== "undefined" ? fetch.bind(globalThis) : undefined as any;
 
 class BaseClient {
     readonly baseURL: string
@@ -448,10 +515,10 @@ class BaseClient {
         // If we now have authentication data, add it to the request
         if (authData) {
             if (authData.query) {
-                query = {...query, ...authData.query};
+                query = { ...query, ...authData.query };
             }
             if (authData.headers) {
-                headers = {...headers, ...authData.headers};
+                headers = { ...headers, ...authData.headers };
             }
         }
 
@@ -469,10 +536,10 @@ class BaseClient {
         // If we now have authentication data, add it to the request
         if (authData) {
             if (authData.query) {
-                query = {...query, ...authData.query};
+                query = { ...query, ...authData.query };
             }
             if (authData.headers) {
-                headers = {...headers, ...authData.headers};
+                headers = { ...headers, ...authData.headers };
             }
         }
 
@@ -490,10 +557,10 @@ class BaseClient {
         // If we now have authentication data, add it to the request
         if (authData) {
             if (authData.query) {
-                query = {...query, ...authData.query};
+                query = { ...query, ...authData.query };
             }
             if (authData.headers) {
-                headers = {...headers, ...authData.headers};
+                headers = { ...headers, ...authData.headers };
             }
         }
 
@@ -520,7 +587,7 @@ class BaseClient {
         }
 
         // Merge our headers with any predefined headers
-        init.headers = {...this.headers, ...init.headers, ...headers}
+        init.headers = { ...this.headers, ...init.headers, ...headers }
 
         // Fetch auth data if there is any
         const authData = await this.getAuthData();
@@ -528,16 +595,16 @@ class BaseClient {
         // If we now have authentication data, add it to the request
         if (authData) {
             if (authData.query) {
-                query = {...query, ...authData.query};
+                query = { ...query, ...authData.query };
             }
             if (authData.headers) {
-                init.headers = {...init.headers, ...authData.headers};
+                init.headers = { ...init.headers, ...authData.headers };
             }
         }
 
         // Make the actual request
         const queryString = query ? '?' + encodeQuery(query) : ''
-        const response = await this.fetcher(this.baseURL+path+queryString, init)
+        const response = await this.fetcher(this.baseURL + path + queryString, init)
 
         // handle any error responses
         if (!response.ok) {
@@ -583,8 +650,8 @@ function isAPIErrorResponse(err: any): err is APIErrorResponse {
     return (
         err !== undefined && err !== null &&
         isErrCode(err.code) &&
-        typeof(err.message) === "string" &&
-        (err.details === undefined || err.details === null || typeof(err.details) === "object")
+        typeof (err.message) === "string" &&
+        (err.details === undefined || err.details === null || typeof (err.details) === "object")
     )
 }
 
@@ -618,8 +685,8 @@ export class APIError extends Error {
         // set error name as constructor name, make it not enumerable to keep native Error behavior
         // https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Operators/new.target#new.target_in_constructors
         Object.defineProperty(this, 'name', {
-            value:        'APIError',
-            enumerable:   false,
+            value: 'APIError',
+            enumerable: false,
             configurable: true,
         })
 

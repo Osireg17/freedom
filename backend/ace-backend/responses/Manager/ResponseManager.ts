@@ -10,8 +10,16 @@ import { v5 as uuidv5 } from 'uuid';
 const RESPONSE_NAMESPACE = "3fbc9571-0810-4c3e-bb36-3918a562479e";
 
 
-export async function createUserResponse(params: UserResponseRequest, userId: string): Promise<UserResponseResponse> {
-    const { interviewId, questionId, videoResponseBase64, responseTimeMs, redoAttemptNumber = 0 } = params;
+export interface UserResponseParams {
+    interviewId: string;
+    questionId: string;
+    videoResponseBuffer: Buffer;
+    responseTimeMs: number;
+    redoAttemptNumber?: number;
+}
+
+export async function createUserResponse(params: UserResponseParams, userId: string): Promise<UserResponseResponse> {
+    const { interviewId, questionId, videoResponseBuffer, responseTimeMs, redoAttemptNumber = 0 } = params;
 
     log.info("Processing user response", { interviewId, questionId, userId });
 
@@ -46,30 +54,19 @@ export async function createUserResponse(params: UserResponseRequest, userId: st
     const filename = `${responseId}.webm`;
     const filePath = `interviews/${userId}/${interviewId}/${filename}`;
 
-    // Validate payload size and base64 format early to prevent DoS
-    if (!videoResponseBase64) {
+    // Validate payload size early to prevent DoS
+    if (!videoResponseBuffer || videoResponseBuffer.length === 0) {
         throw APIError.invalidArgument("Response payload is empty");
     }
 
-    const cleanBase64 = videoResponseBase64.replace(/\s/g, '');
-    const approxByteSize = (cleanBase64.length * 3) / 4;
     const MAX_PAYLOAD_SIZE_BYTES = 50 * 1024 * 1024; // 50MB
-    if (approxByteSize > MAX_PAYLOAD_SIZE_BYTES) {
+    if (videoResponseBuffer.length > MAX_PAYLOAD_SIZE_BYTES) {
         throw APIError.invalidArgument("Response payload is too large (maximum 50MB allowed)");
     }
 
-    // Base64 format validation
-    const base64Regex = /^[A-Za-z0-9+/]*={0,2}$/;
-    if (!base64Regex.test(cleanBase64)) {
-        throw APIError.invalidArgument("Invalid base64 payload format");
-    }
+    log.info("Uploading response to bucket", { filePath, byteLength: videoResponseBuffer.length });
 
-    // Decode base64 to buffer
-    const audioBuffer = Buffer.from(cleanBase64, 'base64');
-
-    log.info("Uploading response to bucket", { filePath, byteLength: audioBuffer.byteLength });
-
-    await responsesBucket.upload(filePath, audioBuffer, { contentType: 'audio/webm' });
+    await responsesBucket.upload(filePath, videoResponseBuffer, { contentType: 'audio/webm' });
 
     // 4. Create or update answer record atomically using ON CONFLICT DO UPDATE
     let finalResponseId: string;

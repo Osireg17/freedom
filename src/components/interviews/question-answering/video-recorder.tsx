@@ -8,6 +8,8 @@ import { Progress } from '@/components/ui/progress';
 import { useErrorLogging } from '@/hooks/use-error-logging';
 import { toast } from 'sonner';
 import { Camera, Loader2, VideoOff, Settings } from 'lucide-react';
+import { useAuth } from '@clerk/nextjs';
+import Client, { Local } from '@/lib/client';
 import {
     hasValidDeviceSettings,
     getActiveMediaStream,
@@ -51,6 +53,7 @@ export default function VideoRecorder({
 }: VideoRecorderProps) {
     const router = useRouter();
     const { logError } = useErrorLogging();
+    const { getToken } = useAuth();
 
     // Core state
     const [status, setStatus] = useState<RecorderStatus>('idle');
@@ -122,6 +125,14 @@ export default function VideoRecorder({
 
         init();
     }, [logError]);
+
+    // Show device setup modal on mount if no valid settings exist
+    useEffect(() => {
+        if (!hasValidDeviceSettings()) {
+            console.log('[VideoRecorder] No valid device settings, showing device setup modal');
+            setShowDeviceModal(true);
+        }
+    }, []);
 
     // Show intro modal when webcam is ready
     useEffect(() => {
@@ -344,19 +355,23 @@ export default function VideoRecorder({
         setStatus('submitting');
 
         try {
-            const formData = new FormData();
-            formData.append('videoResponse', recordedBlob, 'answer.webm');
             const duration = Math.min(maxResponseTime, maxResponseTime - recordTimeRemaining);
-            formData.append('responseTimeMs', (duration * 1000).toString());
-            formData.append('redoAttemptNumber', redoAttempts.toString());
+            const token = await getToken();
+            const responseTimeMs = Math.round(duration * 1000);
+            
+            const urlObj = new URL(`${Local}/interviews/${interviewId}/questions/${questionId}/response`);
+            urlObj.searchParams.set('responseTimeMs', responseTimeMs.toString());
+            urlObj.searchParams.set('redoAttemptNumber', redoAttempts.toString());
+            const url = urlObj.toString();
 
-            const response = await fetch(
-                `/api/interviews/${interviewId}/questions/${questionId}/response`,
-                {
-                    method: 'POST',
-                    body: formData,
-                }
-            );
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'video/webm',
+                },
+                body: recordedBlob,
+            });
 
             if (!response.ok) {
                 const errorData = await response.json().catch(() => ({}));
@@ -435,17 +450,17 @@ export default function VideoRecorder({
                             {(status === 'preparing' ||
                                 status === 'recording' ||
                                 status === 'idle') && (
-                                <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={handleOpenSettings}
-                                    className="h-7 w-7 p-0"
-                                    data-testid="device-settings-button"
-                                    title="Change camera or microphone"
-                                >
-                                    <Settings className="h-4 w-4" />
-                                </Button>
-                            )}
+                                    <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={handleOpenSettings}
+                                        className="h-7 w-7 p-0"
+                                        data-testid="device-settings-button"
+                                        title="Change camera or microphone"
+                                    >
+                                        <Settings className="h-4 w-4" />
+                                    </Button>
+                                )}
                         </div>
                     </div>
                     {(status === 'preparing' || status === 'recording') && (

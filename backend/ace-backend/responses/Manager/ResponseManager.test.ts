@@ -77,10 +77,10 @@ describe('ResponseManager', () => {
 
     describe('createUserResponse', () => {
         const userId = 'user-123';
-        const params: UserResponseRequest = {
+        const params = {
             interviewId: 'int-123',
             questionId: 'q-123',
-            videoResponseBase64: 'R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', // tiny base64
+            videoResponseBuffer: Buffer.from('dummy-payload'),
             responseTimeMs: 5000,
             redoAttemptNumber: 0
         };
@@ -108,7 +108,7 @@ describe('ResponseManager', () => {
             (db.query.interviews.findFirst as any).mockResolvedValue({ userId });
             (db.query.interviewQuestions.findFirst as any).mockResolvedValue({ id: params.questionId });
 
-            const invalidParams = { ...params, videoResponseBase64: '' };
+            const invalidParams = { ...params, videoResponseBuffer: Buffer.alloc(0) };
             await expect(createUserResponse(invalidParams, userId)).rejects.toThrow('Response payload is empty');
         });
 
@@ -116,18 +116,8 @@ describe('ResponseManager', () => {
             (db.query.interviews.findFirst as any).mockResolvedValue({ userId });
             (db.query.interviewQuestions.findFirst as any).mockResolvedValue({ id: params.questionId });
 
-            // Generate base64 string larger than 50MB
-            const largeBase64 = 'A'.repeat(68 * 1024 * 1024);
-            const invalidParams = { ...params, videoResponseBase64: largeBase64 };
+            const invalidParams = { ...params, videoResponseBuffer: Buffer.alloc(51 * 1024 * 1024) };
             await expect(createUserResponse(invalidParams, userId)).rejects.toThrow('Response payload is too large');
-        });
-
-        it('should throw invalidArgument if payload format is invalid', async () => {
-            (db.query.interviews.findFirst as any).mockResolvedValue({ userId });
-            (db.query.interviewQuestions.findFirst as any).mockResolvedValue({ id: params.questionId });
-
-            const invalidParams = { ...params, videoResponseBase64: 'not-valid-base64!!!' };
-            await expect(createUserResponse(invalidParams, userId)).rejects.toThrow('Invalid base64 payload format');
         });
 
         it('should insert or update answer, upload to bucket, trigger task, and return success', async () => {

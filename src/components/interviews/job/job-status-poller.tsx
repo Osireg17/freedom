@@ -7,10 +7,11 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import { useErrorLogging } from '@/hooks/use-error-logging';
+import { useAuth } from '@clerk/nextjs';
+import Client, { Local } from '@/lib/client';
 
 type Props = {
     interviewId: string;
-    runId: string;
     intervalMs?: number;
 };
 
@@ -21,7 +22,6 @@ type ApiResponse = {
 
 export default function JobStatusPoller({
     interviewId,
-    runId,
     intervalMs = 3000,
 }: Props) {
     const router = useRouter();
@@ -33,6 +33,7 @@ export default function JobStatusPoller({
     );
     const timer = useRef<NodeJS.Timeout | null>(null);
     const { logError } = useErrorLogging();
+    const { getToken } = useAuth();
 
     const clearTimer = () => {
         if (timer.current) {
@@ -43,16 +44,20 @@ export default function JobStatusPoller({
 
     const pollOnce = async () => {
         try {
-            const res = await fetch(
-                `/api/interviews/${interviewId}/status?runId=${runId}`
-            );
-
-            if (!res.ok) {
-                // This will be caught by the catch block
-                throw new Error(`HTTP error! status: ${res.status}`);
+            const token = await getToken();
+            if (!token) {
+                clearTimer();
+                setStatus('error');
+                setMessage('Authentication session expired. Please sign in again.');
+                toast.error('Session expired. Please sign in again.');
+                return;
             }
 
-            const json: ApiResponse = await res.json();
+            const client = new Client(Local, {
+                auth: async () => ({ authorization: `Bearer ${token}` })
+            });
+
+            const json = await client.interviews.getInterviewStatusApi(interviewId);
 
             switch (json.status) {
                 case 'completed':
@@ -93,7 +98,7 @@ export default function JobStatusPoller({
 
         return () => clearTimer(); // cleanup on unmount
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [interviewId, runId, intervalMs]);
+    }, [interviewId, intervalMs]);
 
     if (status === 'error') {
         return (
