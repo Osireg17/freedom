@@ -49,39 +49,45 @@ export async function createUserResponse(params: UserResponseRequest, userId: st
 
     await responsesBucket.upload(filePath, audioBuffer, { contentType: 'audio/webm' });
 
-    // 4. Create or update answer record
-    const existingAnswer = await db.query.interviewAnswers.findFirst({
-        where: and(
-            eq(interviewAnswers.interviewId, interviewId),
-            eq(interviewAnswers.interviewQuestionId, questionId)
-        )
-    });
+    // 4. Create or update answer record inside a transaction to prevent a race condition
+    // where two simultaneous submissions for the same question both read no existing row
+    // and then both attempt to insert, causing a unique constraint violation.
+    let finalResponseId!: string;
 
-    const finalResponseId = existingAnswer ? existingAnswer.id : responseId;
+    await db.transaction(async (tx) => {
+        const existingAnswer = await tx.query.interviewAnswers.findFirst({
+            where: and(
+                eq(interviewAnswers.interviewId, interviewId),
+                eq(interviewAnswers.interviewQuestionId, questionId)
+            )
+        });
 
-    if (existingAnswer) {
-        await db.update(interviewAnswers)
-            .set({
+        finalResponseId = existingAnswer ? existingAnswer.id : responseId;
+
+        if (existingAnswer) {
+            await tx.update(interviewAnswers)
+                .set({
+                    redoAttemptNumber,
+                    audioUrl: filePath,
+                    audioDurationMs: responseTimeMs,
+                    updatedAt: new Date()
+                })
+                .where(eq(interviewAnswers.id, existingAnswer.id));
+        } else {
+            await tx.insert(interviewAnswers).values({
+                id: responseId,
+                interviewId,
+                interviewQuestionId: questionId,
                 redoAttemptNumber,
                 audioUrl: filePath,
                 audioDurationMs: responseTimeMs,
+                createdAt: new Date(),
                 updatedAt: new Date()
-            })
-            .where(eq(interviewAnswers.id, existingAnswer.id));
-    } else {
-        await db.insert(interviewAnswers).values({
-            id: responseId,
-            interviewId,
-            interviewQuestionId: questionId,
-            redoAttemptNumber,
-            audioUrl: filePath,
-            audioDurationMs: responseTimeMs,
-            createdAt: new Date(),
-            updatedAt: new Date()
-        });
-    }
+            });
+        }
+    });
 
-    log.info("Database record updated", { finalResponseId });
+    log.info("Database record updated", { finalResponseId: finalResponseId! });
 
     // 5. Trigger background processing task
     log.info("Triggering record-interview-task", { finalResponseId, interviewId, questionId, userId });
@@ -89,7 +95,7 @@ export async function createUserResponse(params: UserResponseRequest, userId: st
     const handle = await tasks.trigger(
         "record-interview-task",
         {
-            responseId: finalResponseId,
+            responseId: finalResponseId!,
             interviewId,
             questionId,
             userId,
@@ -101,7 +107,7 @@ export async function createUserResponse(params: UserResponseRequest, userId: st
 
     return {
         success: true,
-        responseId: finalResponseId,
+        responseId: finalResponseId!,
         status: 'processing',
         message: 'Your response has been submitted and is being analyzed.',
         runId: handle.id,
