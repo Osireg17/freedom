@@ -359,7 +359,10 @@ export default function VideoRecorder({
             const token = await getToken();
             const responseTimeMs = Math.round(duration * 1000);
             
-            const url = `${Local}/interviews/${interviewId}/questions/${questionId}/response?responseTimeMs=${responseTimeMs}&redoAttemptNumber=${redoAttempts}`;
+            const urlObj = new URL(`${Local}/interviews/${interviewId}/questions/${questionId}/response`);
+            urlObj.searchParams.set('responseTimeMs', responseTimeMs.toString());
+            urlObj.searchParams.set('redoAttemptNumber', redoAttempts.toString());
+            const url = urlObj.toString();
 
             const response = await fetch(url, {
                 method: 'POST',

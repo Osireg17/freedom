@@ -44,8 +44,17 @@ export default function JobStatusPoller({
 
     const pollOnce = async () => {
         try {
+            const token = await getToken();
+            if (!token) {
+                clearTimer();
+                setStatus('error');
+                setMessage('Authentication session expired. Please sign in again.');
+                toast.error('Session expired. Please sign in again.');
+                return;
+            }
+
             const client = new Client(Local, {
-                auth: async () => ({ authorization: `Bearer ${await getToken()}` })
+                auth: async () => ({ authorization: `Bearer ${token}` })
             });
 
             const json = await client.interviews.getInterviewStatusApi(interviewId);

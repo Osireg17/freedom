@@ -20,13 +20,17 @@ jest.mock('@clerk/nextjs', () => {
 })
 
 jest.mock('@/lib/client', () => {
-    return jest.fn().mockImplementation(() => {
-        return {
-            responses: {
-                getResponseApi: jest.fn(),
-            },
-        };
-    });
+    return {
+        __esModule: true,
+        default: jest.fn().mockImplementation(() => {
+            return {
+                responses: {
+                    getResponseApi: jest.fn(),
+                },
+            };
+        }),
+        Local: 'http://localhost:4000',
+    };
 })
 
 jest.mock('@/hooks/use-error-logging', () => ({
@@ -127,14 +131,35 @@ class MockMediaRecorder {
 ; (global as any).MediaRecorder = MockMediaRecorder
 
 // URL mocks
+const { URL: NodeURL, URLSearchParams: NodeURLSearchParams } = require('url');
 const revokeSpy = jest.fn()
 const createSpy = jest.fn(() => 'blob:mock-video')
+
+NodeURL.createObjectURL = createSpy
+NodeURL.revokeObjectURL = revokeSpy
+
 Object.defineProperty(global, 'URL', {
-    value: {
-        createObjectURL: createSpy,
-        revokeObjectURL: revokeSpy
-    }
+    value: NodeURL,
+    configurable: true,
+    writable: true
 })
+Object.defineProperty(global, 'URLSearchParams', {
+    value: NodeURLSearchParams,
+    configurable: true,
+    writable: true
+})
+if (typeof window !== 'undefined') {
+    Object.defineProperty(window, 'URL', {
+        value: NodeURL,
+        configurable: true,
+        writable: true
+    })
+    Object.defineProperty(window, 'URLSearchParams', {
+        value: NodeURLSearchParams,
+        configurable: true,
+        writable: true
+    })
+}
 
 // react-webcam mock
 jest.mock('react-webcam', () => {

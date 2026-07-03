@@ -19,7 +19,7 @@ export const getResponseApi = api.raw(
         // Parse path parameters from req.url
         const url = req.url || "";
         const parsedUrl = new URL(url, "http://localhost");
-        const match = parsedUrl.pathname.match(/\/interviews\/([^/]+)\/questions\/([^/]+)\/response/);
+        const match = parsedUrl.pathname.match(/interviews\/([^/]+)\/questions\/([^/]+)\/response\/?$/);
         if (!match) {
             resp.writeHead(400, { "Content-Type": "application/json" });
             resp.end(JSON.stringify({ error: { message: "Invalid URL path" } }));
@@ -32,9 +32,28 @@ export const getResponseApi = api.raw(
         const responseTimeMs = parseInt(parsedUrl.searchParams.get("responseTimeMs") || "0", 10);
         const redoAttemptNumber = parseInt(parsedUrl.searchParams.get("redoAttemptNumber") || "0", 10);
 
-        // Read raw request body into a Buffer
+        // Enforce size limits before buffering the body
+        const MAX_SIZE_BYTES = 50 * 1024 * 1024; // 50MB
+        const contentLengthHeader = req.headers["content-length"];
+        if (contentLengthHeader) {
+            const contentLength = parseInt(contentLengthHeader, 10);
+            if (isNaN(contentLength) || contentLength > MAX_SIZE_BYTES) {
+                resp.writeHead(413, { "Content-Type": "application/json" });
+                resp.end(JSON.stringify({ error: { message: "Payload too large" } }));
+                return;
+            }
+        }
+
+        // Read raw request body into a Buffer with streaming size verification
         const chunks: Buffer[] = [];
+        let totalBytes = 0;
         for await (const chunk of req) {
+            totalBytes += chunk.length;
+            if (totalBytes > MAX_SIZE_BYTES) {
+                resp.writeHead(413, { "Content-Type": "application/json" });
+                resp.end(JSON.stringify({ error: { message: "Payload too large" } }));
+                return;
+            }
             chunks.push(chunk as Buffer);
         }
         const bodyBuffer = Buffer.concat(chunks as any);

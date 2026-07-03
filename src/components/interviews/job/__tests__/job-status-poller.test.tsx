@@ -17,13 +17,15 @@ jest.mock('sonner', () => ({
 	},
 }));
 
+const mockGetToken = jest.fn().mockResolvedValue('mock-token');
+
 jest.mock('@/hooks/use-error-logging', () => ({
 	useErrorLogging: jest.fn(),
 }));
 
 jest.mock('@clerk/nextjs', () => ({
 	useAuth: () => ({
-		getToken: jest.fn().mockResolvedValue('mock-token'),
+		getToken: mockGetToken,
 	}),
 }));
 
@@ -44,6 +46,7 @@ describe('JobStatusPoller', () => {
 	beforeEach(() => {
 		jest.useFakeTimers();
 		jest.clearAllMocks();
+		mockGetToken.mockResolvedValue('mock-token');
 
 		(useRouter as jest.Mock).mockReturnValue(mockRouter);
 		(useErrorLogging as jest.Mock).mockReturnValue({ logError: mockLogError });
@@ -111,7 +114,9 @@ describe('JobStatusPoller', () => {
 		render(<JobStatusPoller interviewId="interview-123" />);
 
 		// First poll happens immediately
-		expect(mockGetInterviewStatusApi).toHaveBeenCalledTimes(1);
+		await waitFor(() => {
+			expect(mockGetInterviewStatusApi).toHaveBeenCalledTimes(1);
+		});
 
 		// Advance timers to trigger next poll
 		act(() => {
@@ -142,5 +147,18 @@ describe('JobStatusPoller', () => {
 		await waitFor(() => {
 			expect(mockGetInterviewStatusApi).toHaveBeenCalledTimes(2);
 		});
+	});
+
+	it('handles missing Clerk token explicitly', async () => {
+		mockGetToken.mockResolvedValueOnce(null);
+
+		render(<JobStatusPoller interviewId="interview-123" />);
+
+		await waitFor(() => {
+			expect(screen.getByText('Authentication session expired. Please sign in again.')).toBeInTheDocument();
+		});
+
+		expect(toast.error).toHaveBeenCalledWith('Session expired. Please sign in again.');
+		expect(mockGetInterviewStatusApi).not.toHaveBeenCalled();
 	});
 });
