@@ -39,13 +39,6 @@ const RESPONSE_NAMESPACE = "3fbc9571-0810-4c3e-bb36-3918a562479e";
  * - Trigger task failure -> Internal
  */
 export async function createUserResponse(params: UserResponseParams, userId: string): Promise<UserResponseResponse> {
-    // TODO: Verify interview exists and matches user ownership
-    // TODO: Verify question exists
-    // TODO: Validate buffer length constraints (empty or > 50MB)
-    // TODO: Upload video to responsesBucket
-    // TODO: Within a try-catch block:
-    //       1. Insert or update the answer record in DB atomically
-    //       2. Trigger the record-interview-task background task
     const { interviewId, questionId, videoResponseBuffer, responseTimeMs, redoAttemptNumber = 0 } = params;
 
     log.info("Processing user response", { interviewId, questionId, userId });
