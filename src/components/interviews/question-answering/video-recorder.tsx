@@ -359,29 +359,30 @@ export default function VideoRecorder({
             const token = await getToken();
             const responseTimeMs = Math.round(duration * 1000);
 
-            const urlObj = new URL(`${Local}/interviews/${interviewId}/questions/${questionId}/response`);
-            urlObj.searchParams.set('responseTimeMs', responseTimeMs.toString());
-            urlObj.searchParams.set('redoAttemptNumber', redoAttempts.toString());
-            const url = urlObj.toString();
-
-            const response = await fetch(url, {
-                method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'Content-Type': 'video/webm',
-                },
-                body: recordedBlob,
+            const client = new Client(Local, {
+                auth: async () => ({ authorization: `Bearer ${token}` })
             });
 
+            const response = await client.responses.getResponseApi(
+                'POST',
+                interviewId,
+                questionId,
+                recordedBlob,
+                {
+                    query: {
+                        responseTimeMs: responseTimeMs.toString(),
+                        redoAttemptNumber: redoAttempts.toString(),
+                    },
+                }
+            );
+
             if (!response.ok) {
-                const errorData = await response.json().catch(() => ({}));
-                throw new Error(
-                    `Server error: ${response.status}. ${errorData?.error?.message || ''}`
-                );
+                throw new Error(`Server error: ${response.status}`);
             }
 
             toast.success('Response submitted!');
             router.push(`/interviews/job/${interviewId}`);
+
         } catch (error) {
             logError(error, { context: 'VideoRecorder.submitRecording' });
             setStatus('reviewing');
