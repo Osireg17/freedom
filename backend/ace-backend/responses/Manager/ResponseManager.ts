@@ -42,39 +42,37 @@ export async function createUserResponse(params: UserResponseRequest, userId: st
     const filename = `${responseId}.webm`;
     const filePath = `interviews/${userId}/${interviewId}/${filename}`;
 
+    // Validate payload size and base64 format early to prevent DoS
+    if (!videoResponseBase64) {
+        throw APIError.invalidArgument("Response payload is empty");
+    }
+
+    const cleanBase64 = videoResponseBase64.replace(/\s/g, '');
+    const approxByteSize = (cleanBase64.length * 3) / 4;
+    const MAX_PAYLOAD_SIZE_BYTES = 50 * 1024 * 1024; // 50MB
+    if (approxByteSize > MAX_PAYLOAD_SIZE_BYTES) {
+        throw APIError.invalidArgument("Response payload is too large (maximum 50MB allowed)");
+    }
+
+    // Base64 format validation
+    const base64Regex = /^[A-Za-z0-9+/]*={0,2}$/;
+    if (!base64Regex.test(cleanBase64)) {
+        throw APIError.invalidArgument("Invalid base64 payload format");
+    }
+
     // Decode base64 to buffer
-    const audioBuffer = Buffer.from(videoResponseBase64, 'base64');
+    const audioBuffer = Buffer.from(cleanBase64, 'base64');
 
     log.info("Uploading response to bucket", { filePath, byteLength: audioBuffer.byteLength });
 
     await responsesBucket.upload(filePath, audioBuffer, { contentType: 'audio/webm' });
 
-    // 4. Create or update answer record inside a transaction to prevent a race condition
-    // where two simultaneous submissions for the same question both read no existing row
-    // and then both attempt to insert, causing a unique constraint violation.
-    let finalResponseId!: string;
+    // 4. Create or update answer record atomically using ON CONFLICT DO UPDATE
+    let finalResponseId: string;
 
-    await db.transaction(async (tx) => {
-        const existingAnswer = await tx.query.interviewAnswers.findFirst({
-            where: and(
-                eq(interviewAnswers.interviewId, interviewId),
-                eq(interviewAnswers.interviewQuestionId, questionId)
-            )
-        });
-
-        finalResponseId = existingAnswer ? existingAnswer.id : responseId;
-
-        if (existingAnswer) {
-            await tx.update(interviewAnswers)
-                .set({
-                    redoAttemptNumber,
-                    audioUrl: filePath,
-                    audioDurationMs: responseTimeMs,
-                    updatedAt: new Date()
-                })
-                .where(eq(interviewAnswers.id, existingAnswer.id));
-        } else {
-            await tx.insert(interviewAnswers).values({
+    try {
+        const [upsertedAnswer] = await db.insert(interviewAnswers)
+            .values({
                 id: responseId,
                 interviewId,
                 interviewQuestionId: questionId,
@@ -83,11 +81,28 @@ export async function createUserResponse(params: UserResponseRequest, userId: st
                 audioDurationMs: responseTimeMs,
                 createdAt: new Date(),
                 updatedAt: new Date()
-            });
-        }
-    });
+            })
+            .onConflictDoUpdate({
+                target: [interviewAnswers.interviewId, interviewAnswers.interviewQuestionId],
+                set: {
+                    redoAttemptNumber,
+                    audioUrl: filePath,
+                    audioDurationMs: responseTimeMs,
+                    updatedAt: new Date()
+                }
+            })
+            .returning({ id: interviewAnswers.id });
 
-    log.info("Database record updated", { finalResponseId: finalResponseId! });
+        if (!upsertedAnswer) {
+            throw APIError.internal("Failed to save response to database");
+        }
+        finalResponseId = upsertedAnswer.id;
+    } catch (err: any) {
+        log.error("Failed to save response to database", { error: err.message });
+        throw APIError.internal(`Failed to save response: ${err.message}`);
+    }
+
+    log.info("Database record updated", { finalResponseId });
 
     // 5. Trigger background processing task
     log.info("Triggering record-interview-task", { finalResponseId, interviewId, questionId, userId });

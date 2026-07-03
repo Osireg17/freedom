@@ -5,7 +5,7 @@ import {
     timestamp,
     uuid,
     integer,
-    jsonb, pgEnum
+    jsonb, pgEnum, unique
 } from 'drizzle-orm/pg-core';
 
 // Enums
@@ -83,7 +83,9 @@ export const interviewAnswers = pgTable('interview_answers', {
   jobAlignmentBreakdown: jsonb('job_alignment_breakdown'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull()
-});
+}, (t) => [
+  unique('interview_answers_interview_id_interview_question_id_unique').on(t.interviewId, t.interviewQuestionId)
+]);
 
 // Company Profiles table
 export const companyProfiles = pgTable('company_profiles', {

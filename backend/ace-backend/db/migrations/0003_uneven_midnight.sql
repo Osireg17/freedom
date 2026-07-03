@@ -1,0 +1,1 @@
+ALTER TABLE "interview_answers" ADD CONSTRAINT "interview_answers_interview_id_interview_question_id_unique" UNIQUE("interview_id","interview_question_id");
