@@ -358,7 +358,7 @@ export default function VideoRecorder({
             const duration = Math.min(maxResponseTime, maxResponseTime - recordTimeRemaining);
             const token = await getToken();
             const responseTimeMs = Math.round(duration * 1000);
-            
+
             const urlObj = new URL(`${Local}/interviews/${interviewId}/questions/${questionId}/response`);
             urlObj.searchParams.set('responseTimeMs', responseTimeMs.toString());
             urlObj.searchParams.set('redoAttemptNumber', redoAttempts.toString());
