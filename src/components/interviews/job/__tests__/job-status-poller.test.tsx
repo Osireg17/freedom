@@ -4,6 +4,8 @@ import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import { useErrorLogging } from '@/hooks/use-error-logging';
 
+const mockGetInterviewStatusApi = jest.fn();
+
 // Mock dependencies
 jest.mock('next/navigation', () => ({
 	useRouter: jest.fn(),
@@ -19,6 +21,22 @@ jest.mock('@/hooks/use-error-logging', () => ({
 	useErrorLogging: jest.fn(),
 }));
 
+jest.mock('@clerk/nextjs', () => ({
+	useAuth: () => ({
+		getToken: jest.fn().mockResolvedValue('mock-token'),
+	}),
+}));
+
+jest.mock('@/lib/client', () => {
+	return jest.fn().mockImplementation(() => {
+		return {
+			interviews: {
+				getInterviewStatusApi: mockGetInterviewStatusApi,
+			},
+		};
+	});
+});
+
 describe('JobStatusPoller', () => {
 	const mockRouter = { push: jest.fn(), refresh: jest.fn() };
 	const mockLogError = jest.fn();
@@ -29,9 +47,6 @@ describe('JobStatusPoller', () => {
 
 		(useRouter as jest.Mock).mockReturnValue(mockRouter);
 		(useErrorLogging as jest.Mock).mockReturnValue({ logError: mockLogError });
-
-		// Mock fetch
-		global.fetch = jest.fn();
 	});
 
 	afterEach(() => {
@@ -39,10 +54,7 @@ describe('JobStatusPoller', () => {
 	});
 
 	it('renders with initial processing state', () => {
-		(global.fetch as jest.Mock).mockResolvedValueOnce({
-			ok: true,
-			json: async () => ({ status: 'processing' }),
-		});
+		mockGetInterviewStatusApi.mockResolvedValueOnce({ status: 'processing' });
 
 		render(<JobStatusPoller interviewId="interview-123" runId="run-456" />);
 
@@ -53,10 +65,7 @@ describe('JobStatusPoller', () => {
 	});
 
 	it('updates to completed state and redirects when status is completed', async () => {
-		(global.fetch as jest.Mock).mockResolvedValueOnce({
-			ok: true,
-			json: async () => ({ status: 'completed' }),
-		});
+		mockGetInterviewStatusApi.mockResolvedValueOnce({ status: 'completed' });
 
 		render(<JobStatusPoller interviewId="interview-123" runId="run-456" />);
 
@@ -78,12 +87,9 @@ describe('JobStatusPoller', () => {
 	});
 
 	it('shows error state when API returns error status', async () => {
-		(global.fetch as jest.Mock).mockResolvedValueOnce({
-			ok: true,
-			json: async () => ({
-				status: 'error',
-				message: 'Custom error message',
-			}),
+		mockGetInterviewStatusApi.mockResolvedValueOnce({
+			status: 'error',
+			message: 'Custom error message',
 		});
 
 		render(<JobStatusPoller interviewId="interview-123" runId="run-456" />);
@@ -100,15 +106,12 @@ describe('JobStatusPoller', () => {
 	});
 
 	it('continues polling when status is still processing', async () => {
-		(global.fetch as jest.Mock).mockResolvedValue({
-			ok: true,
-			json: async () => ({ status: 'processing' }),
-		});
+		mockGetInterviewStatusApi.mockResolvedValue({ status: 'processing' });
 
 		render(<JobStatusPoller interviewId="interview-123" runId="run-456" />);
 
 		// First poll happens immediately
-		expect(global.fetch).toHaveBeenCalledTimes(1);
+		expect(mockGetInterviewStatusApi).toHaveBeenCalledTimes(1);
 
 		// Advance timers to trigger next poll
 		act(() => {
@@ -116,17 +119,14 @@ describe('JobStatusPoller', () => {
 		});
 
 		await waitFor(() => {
-			expect(global.fetch).toHaveBeenCalledTimes(2);
+			expect(mockGetInterviewStatusApi).toHaveBeenCalledTimes(2);
 		});
 	});
 
 	it('handles fetch errors and continues polling', async () => {
-		(global.fetch as jest.Mock)
+		mockGetInterviewStatusApi
 			.mockRejectedValueOnce(new Error('Network error'))
-			.mockResolvedValueOnce({
-				ok: true,
-				json: async () => ({ status: 'processing' }),
-			});
+			.mockResolvedValueOnce({ status: 'processing' });
 
 		render(<JobStatusPoller interviewId="interview-123" runId="run-456" />);
 
@@ -140,7 +140,7 @@ describe('JobStatusPoller', () => {
 		});
 
 		await waitFor(() => {
-			expect(global.fetch).toHaveBeenCalledTimes(2);
+			expect(mockGetInterviewStatusApi).toHaveBeenCalledTimes(2);
 		});
 	});
 });

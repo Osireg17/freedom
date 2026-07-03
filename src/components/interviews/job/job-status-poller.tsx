@@ -7,6 +7,8 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import { useErrorLogging } from '@/hooks/use-error-logging';
+import { useAuth } from '@clerk/nextjs';
+import Client, { Local } from '@/lib/client';
 
 type Props = {
     interviewId: string;
@@ -33,6 +35,7 @@ export default function JobStatusPoller({
     );
     const timer = useRef<NodeJS.Timeout | null>(null);
     const { logError } = useErrorLogging();
+    const { getToken } = useAuth();
 
     const clearTimer = () => {
         if (timer.current) {
@@ -43,16 +46,11 @@ export default function JobStatusPoller({
 
     const pollOnce = async () => {
         try {
-            const res = await fetch(
-                `/api/interviews/${interviewId}/status?runId=${runId}`
-            );
+            const client = new Client(Local, {
+                auth: async () => ({ authorization: `Bearer ${await getToken()}` })
+            });
 
-            if (!res.ok) {
-                // This will be caught by the catch block
-                throw new Error(`HTTP error! status: ${res.status}`);
-            }
-
-            const json: ApiResponse = await res.json();
+            const json = await client.interviews.getInterviewStatusApi(interviewId);
 
             switch (json.status) {
                 case 'completed':

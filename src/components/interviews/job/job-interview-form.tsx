@@ -15,6 +15,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useErrorLogging } from '@/hooks/use-error-logging';
 import { Progress } from '@/components/ui/progress';
 import { toast } from 'sonner';
+import { useAuth } from '@clerk/nextjs';
+import Client, { Local } from '@/lib/client';
 
 // Helper function to count words
 const countWords = (str: string) => {
@@ -54,6 +56,7 @@ export default function JobInterviewForm() {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [formProgress, setFormProgress] = useState(0);
     const { logError } = useErrorLogging();
+    const { getToken } = useAuth();
 
     // Define default values for the form
     const defaultValues: Partial<JobInterviewFormValues> = {
@@ -94,23 +97,21 @@ export default function JobInterviewForm() {
         setFormProgress(30);
 
         try {
-            // Make API call to create the interview
-            const response = await fetch('/api/interviews/job', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(values),
+            const client = new Client(Local, {
+                auth: async () => ({ authorization: `Bearer ${await getToken()}` })
+            });
+
+            // Make API call to create the interview using the Encore client
+            const data = await client.interviews.createInterviewApi({
+                jobTitle: values.jobTitle,
+                companyName: values.companyName,
+                jobDescription: values.jobDescription,
+                yearsExperience: values.yearsExperience,
+                timeToAnswer: values.timeToAnswer,
+                prepTime: values.prepTime,
             });
 
             setFormProgress(60);
-
-            if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.error?.message || 'Failed to create interview');
-            }
-
-            const data = await response.json();
 
             // Update progress indicators
             setFormProgress(100);
