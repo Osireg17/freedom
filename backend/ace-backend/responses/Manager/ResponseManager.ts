@@ -5,6 +5,10 @@ import { interviews, interviewQuestions, interviewAnswers } from "../../db/schem
 import { and, eq } from "drizzle-orm";
 import { UserResponseRequest, UserResponseResponse } from "../types";
 import log from "encore.dev/log";
+import { v5 as uuidv5 } from 'uuid';
+
+const RESPONSE_NAMESPACE = "3fbc9571-0810-4c3e-bb36-3918a562479e";
+
 
 export async function createUserResponse(params: UserResponseRequest, userId: string): Promise<UserResponseResponse> {
     const { interviewId, questionId, videoResponseBase64, responseTimeMs, redoAttemptNumber = 0 } = params;
@@ -37,8 +41,8 @@ export async function createUserResponse(params: UserResponseRequest, userId: st
         throw APIError.notFound("Question not found");
     }
 
-    // 3. Generate unique IDs and process video file
-    const responseId = crypto.randomUUID();
+    // 3. Generate stable, unique ID and process video file
+    const responseId = uuidv5(`${interviewId}:${questionId}`, RESPONSE_NAMESPACE);
     const filename = `${responseId}.webm`;
     const filePath = `interviews/${userId}/${interviewId}/${filename}`;
 
