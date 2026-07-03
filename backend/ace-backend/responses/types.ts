@@ -14,3 +14,12 @@ export interface UserResponseResponse {
     runId: string;
     audioUrl?: string;
 }
+
+
+export interface UserResponseParams {
+    interviewId: string;
+    questionId: string;
+    videoResponseBuffer: Buffer;
+    responseTimeMs: number;
+    redoAttemptNumber?: number;
+}

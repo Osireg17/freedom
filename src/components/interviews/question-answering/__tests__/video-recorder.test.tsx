@@ -19,13 +19,14 @@ jest.mock('@clerk/nextjs', () => {
     };
 })
 
+const mockGetResponseApi = jest.fn()
 jest.mock('@/lib/client', () => {
     return {
         __esModule: true,
         default: jest.fn().mockImplementation(() => {
             return {
                 responses: {
-                    getResponseApi: jest.fn(),
+                    getResponseApi: mockGetResponseApi,
                 },
             };
         }),
@@ -406,12 +407,10 @@ describe('Device Setup Modal Integration', () => {
     })
 
     test('submits raw binary video response successfully', async () => {
-        global.fetch = jest.fn().mockImplementation(() =>
-            Promise.resolve({
-                ok: true,
-                json: () => Promise.resolve({ success: true }),
-            } as any)
-        );
+        mockGetResponseApi.mockResolvedValue({
+            ok: true,
+            json: () => Promise.resolve({ success: true }),
+        });
 
         await driveToReview();
 
@@ -420,22 +419,21 @@ describe('Device Setup Modal Integration', () => {
             fireEvent.click(submitBtn);
         });
 
-        expect(global.fetch).toHaveBeenCalledWith(
-            expect.stringContaining('/interviews/int1/questions/q1/response?responseTimeMs='),
+        expect(mockGetResponseApi).toHaveBeenCalledWith(
+            'POST',
+            'int1',
+            'q1',
+            expect.any(Blob),
             expect.objectContaining({
-                method: 'POST',
-                headers: expect.objectContaining({
-                    'Authorization': 'Bearer mock-token',
-                    'Content-Type': 'video/webm',
+                query: expect.objectContaining({
+                    responseTimeMs: expect.any(String),
+                    redoAttemptNumber: '0',
                 }),
-                body: expect.any(Blob),
             })
         );
 
         await waitFor(() => {
             expect(toastSuccess).toHaveBeenCalledWith('Response submitted!');
         });
-
-        delete (global as any).fetch;
     });
 })
