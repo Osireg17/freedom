@@ -56,7 +56,7 @@ describe('JobStatusPoller', () => {
 	it('renders with initial processing state', () => {
 		mockGetInterviewStatusApi.mockResolvedValueOnce({ status: 'processing' });
 
-		render(<JobStatusPoller interviewId="interview-123" runId="run-456" />);
+		render(<JobStatusPoller interviewId="interview-123" />);
 
 		expect(screen.getByTestId('job-status-poller')).toBeInTheDocument();
 		expect(
@@ -67,7 +67,7 @@ describe('JobStatusPoller', () => {
 	it('updates to completed state and redirects when status is completed', async () => {
 		mockGetInterviewStatusApi.mockResolvedValueOnce({ status: 'completed' });
 
-		render(<JobStatusPoller interviewId="interview-123" runId="run-456" />);
+		render(<JobStatusPoller interviewId="interview-123" />);
 
 		await waitFor(() => {
 			expect(
@@ -92,7 +92,7 @@ describe('JobStatusPoller', () => {
 			message: 'Custom error message',
 		});
 
-		render(<JobStatusPoller interviewId="interview-123" runId="run-456" />);
+		render(<JobStatusPoller interviewId="interview-123" />);
 
 		await waitFor(() => {
 			expect(
@@ -108,7 +108,7 @@ describe('JobStatusPoller', () => {
 	it('continues polling when status is still processing', async () => {
 		mockGetInterviewStatusApi.mockResolvedValue({ status: 'processing' });
 
-		render(<JobStatusPoller interviewId="interview-123" runId="run-456" />);
+		render(<JobStatusPoller interviewId="interview-123" />);
 
 		// First poll happens immediately
 		expect(mockGetInterviewStatusApi).toHaveBeenCalledTimes(1);
@@ -128,7 +128,7 @@ describe('JobStatusPoller', () => {
 			.mockRejectedValueOnce(new Error('Network error'))
 			.mockResolvedValueOnce({ status: 'processing' });
 
-		render(<JobStatusPoller interviewId="interview-123" runId="run-456" />);
+		render(<JobStatusPoller interviewId="interview-123" />);
 
 		await waitFor(() => {
 			expect(mockLogError).toHaveBeenCalledWith(new Error('Network error'));

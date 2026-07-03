@@ -12,7 +12,6 @@ import Client, { Local } from '@/lib/client';
 
 type Props = {
     interviewId: string;
-    runId: string;
     intervalMs?: number;
 };
 
@@ -23,7 +22,6 @@ type ApiResponse = {
 
 export default function JobStatusPoller({
     interviewId,
-    runId,
     intervalMs = 3000,
 }: Props) {
     const router = useRouter();
@@ -91,7 +89,7 @@ export default function JobStatusPoller({
 
         return () => clearTimer(); // cleanup on unmount
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [interviewId, runId, intervalMs]);
+    }, [interviewId, intervalMs]);
 
     if (status === 'error') {
         return (

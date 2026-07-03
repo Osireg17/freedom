@@ -53,7 +53,7 @@ export default function InterviewProcessingPage() {
                 </div>
 
                 <div className="w-full max-w-md mx-auto">
-                    <JobStatusPoller interviewId={interviewId} runId={runId} />
+                    <JobStatusPoller interviewId={interviewId} />
                 </div>
 
                 <div className="flex justify-center">

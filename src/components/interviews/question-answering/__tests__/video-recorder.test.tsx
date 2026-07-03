@@ -379,4 +379,38 @@ describe('Device Setup Modal Integration', () => {
             expect(screen.getByText('Preparation Time')).toBeInTheDocument()
         })
     })
+
+    test('submits raw binary video response successfully', async () => {
+        global.fetch = jest.fn().mockImplementation(() =>
+            Promise.resolve({
+                ok: true,
+                json: () => Promise.resolve({ success: true }),
+            } as any)
+        );
+
+        await driveToReview();
+
+        const submitBtn = screen.getByTestId('submit-button');
+        await act(async () => {
+            fireEvent.click(submitBtn);
+        });
+
+        expect(global.fetch).toHaveBeenCalledWith(
+            expect.stringContaining('/interviews/int1/questions/q1/response?responseTimeMs='),
+            expect.objectContaining({
+                method: 'POST',
+                headers: expect.objectContaining({
+                    'Authorization': 'Bearer mock-token',
+                    'Content-Type': 'video/webm',
+                }),
+                body: expect.any(Blob),
+            })
+        );
+
+        await waitFor(() => {
+            expect(toastSuccess).toHaveBeenCalledWith('Response submitted!');
+        });
+
+        delete (global as any).fetch;
+    });
 })

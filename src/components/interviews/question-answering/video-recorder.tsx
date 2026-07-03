@@ -355,31 +355,27 @@ export default function VideoRecorder({
         setStatus('submitting');
 
         try {
-            const convertBlobToBase64 = (blob: Blob): Promise<string> => {
-                return new Promise((resolve, reject) => {
-                    const reader = new FileReader();
-                    reader.onloadend = () => {
-                        const base64String = reader.result as string;
-                        const base64Data = base64String.split(',')[1];
-                        resolve(base64Data);
-                    };
-                    reader.onerror = reject;
-                    reader.readAsDataURL(blob);
-                });
-            };
-
-            const base64 = await convertBlobToBase64(recordedBlob);
             const duration = Math.min(maxResponseTime, maxResponseTime - recordTimeRemaining);
+            const token = await getToken();
+            const responseTimeMs = Math.round(duration * 1000);
+            
+            const url = `${Local}/interviews/${interviewId}/questions/${questionId}/response?responseTimeMs=${responseTimeMs}&redoAttemptNumber=${redoAttempts}`;
 
-            const client = new Client(Local, {
-                auth: async () => ({ authorization: `Bearer ${await getToken()}` })
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'video/webm',
+                },
+                body: recordedBlob,
             });
 
-            await client.responses.getResponseApi(interviewId, questionId, {
-                videoResponseBase64: base64,
-                responseTimeMs: Math.round(duration * 1000),
-                redoAttemptNumber: redoAttempts,
-            });
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(
+                    `Server error: ${response.status}. ${errorData?.error?.message || ''}`
+                );
+            }
 
             toast.success('Response submitted!');
             router.push(`/interviews/job/${interviewId}`);
