@@ -65,6 +65,7 @@ export default function VideoRecorder({
     const [recordedVideoURL, setRecordedVideoURL] = useState<string | null>(null);
     const [countdown, setCountdown] = useState(3);
     const [redoAttempts, setRedoAttempts] = useState(0);
+    const [uploadProgress, setUploadProgress] = useState<number | null>(null);
 
     // Modal state
     const [showIntroModal, setShowIntroModal] = useState(false);
@@ -266,6 +267,7 @@ export default function VideoRecorder({
         try {
             const recorder = new MediaRecorder(stream, {
                 mimeType: 'video/webm;codecs=vp9,opus',
+                videoBitsPerSecond: 800000, // 800 Kbps (plenty for high-quality interview recording)
             });
 
             recorder.ondataavailable = (e) => {
@@ -353,38 +355,58 @@ export default function VideoRecorder({
         }
 
         setStatus('submitting');
+        setUploadProgress(0);
 
         try {
             const duration = Math.min(maxResponseTime, maxResponseTime - recordTimeRemaining);
             const token = await getToken();
             const responseTimeMs = Math.round(duration * 1000);
 
-            const client = new Client(Local, {
-                auth: async () => ({ authorization: `Bearer ${token}` })
+            const xhr = new XMLHttpRequest();
+            
+            // Track upload progress
+            xhr.upload.onprogress = (event) => {
+                if (event.lengthComputable) {
+                    const percentComplete = Math.round((event.loaded / event.total) * 100);
+                    setUploadProgress(percentComplete);
+                }
+            };
+
+            const url = `${Local}/interviews/${encodeURIComponent(interviewId)}/questions/${encodeURIComponent(questionId)}/response?responseTimeMs=${responseTimeMs}&redoAttemptNumber=${redoAttempts}`;
+
+            const uploadPromise = new Promise<void>((resolve, reject) => {
+                xhr.open('POST', url);
+                xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+                xhr.setRequestHeader('Content-Type', 'video/webm');
+
+                xhr.onload = () => {
+                    if (xhr.status >= 200 && xhr.status < 300) {
+                        resolve();
+                    } else {
+                        let errMsg = `Server error: ${xhr.status}`;
+                        try {
+                            const parsed = JSON.parse(xhr.responseText);
+                            if (parsed.error?.message) errMsg = parsed.error.message;
+                        } catch {}
+                        reject(new Error(errMsg));
+                    }
+                };
+
+                xhr.onerror = () => reject(new Error('Network error during upload'));
+                xhr.onabort = () => reject(new Error('Upload aborted'));
+
+                xhr.send(recordedBlob);
             });
 
-            const response = await client.responses.getResponseApi(
-                'POST',
-                interviewId,
-                questionId,
-                recordedBlob,
-                {
-                    query: {
-                        responseTimeMs: responseTimeMs.toString(),
-                        redoAttemptNumber: redoAttempts.toString(),
-                    },
-                }
-            );
-
-            if (!response.ok) {
-                throw new Error(`Server error: ${response.status}`);
-            }
+            await uploadPromise;
+            setUploadProgress(null);
 
             toast.success('Response submitted!');
             router.push(`/interviews/job/${interviewId}`);
 
         } catch (error) {
             logError(error, { context: 'VideoRecorder.submitRecording' });
+            setUploadProgress(null);
             setStatus('reviewing');
             toast.error('Failed to submit. Please try again.');
         }
@@ -438,7 +460,7 @@ export default function VideoRecorder({
                             {status === 'countdown' && 'Get Ready'}
                             {status === 'recording' && 'Recording Time'}
                             {status === 'reviewing' && 'Recording Complete'}
-                            {status === 'submitting' && 'Submitting...'}
+                            {status === 'submitting' && (uploadProgress !== null ? `Uploading (${uploadProgress}%)...` : 'Submitting...')}
                             {status === 'error' && 'Error'}
                             {status === 'idle' && 'Ready to Begin'}
                         </div>
@@ -622,7 +644,7 @@ export default function VideoRecorder({
                     {status === 'submitting' && (
                         <Button size="lg" disabled>
                             <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                            Submitting...
+                            {uploadProgress !== null ? `Uploading (${uploadProgress}%)...` : 'Submitting...'}
                         </Button>
                     )}
                 </div>

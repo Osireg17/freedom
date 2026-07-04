@@ -1,0 +1,13 @@
+version: "3"
+
+# Project-level ngrok config — safe to commit, no credentials here.
+# Your authtoken lives in your personal ngrok config, added once with:
+#   ngrok config add-authtoken <your-token>
+#
+# Start the tunnel with:
+#   ngrok start --config ~/.config/ngrok/ngrok.yml --config ./ngrok.yml encore-backend
+
+tunnels:
+  encore-backend:
+    proto: http
+    addr: 4000
