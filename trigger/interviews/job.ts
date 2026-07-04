@@ -11,7 +11,8 @@ import { generateInterviewPrompt } from '@/lib/middleware/create-prompts';
 
 // Configure Trigger.dev
 configure({
-  secretKey: process.env.TRIGGER_SECRET_KEY,
+  // this is the default and if the `TRIGGER_SECRET_KEY` environment variable is set, can omit calling configure
+  secretKey: process.env["TRIGGER_SECRET_KEY"],
 });
 
 // Initialize OpenAI client
@@ -95,7 +96,7 @@ export const generateJobInterviewQuestionsJob = schemaTask({
 async function generateQuestionsWithOpenAI(prompt: string): Promise<z.infer<typeof InterviewQuestionsResponseSchema>> {
   try {
     const response = await openai.responses.parse({
-      model: "gpt-5-mini",
+      model: "gpt-5.4-nano",
       input: [
         {
           role: "system",
@@ -108,10 +109,18 @@ async function generateQuestionsWithOpenAI(prompt: string): Promise<z.infer<type
       ],
       text: {
         format: zodTextFormat(InterviewQuestionsResponseSchema, "interview_questions"),
+        verbosity: "medium",
       },
-      temperature: 0.8,
+      reasoning: {
+        effort: "medium",
+        summary: "auto"
+      },
+      store: true,
+      include: [
+        "reasoning.encrypted_content",
+        "web_search_call.action.sources"
+      ],
       max_output_tokens: 2000,
-      top_p: 1,
     });
 
     // Check if response completed successfully
@@ -120,9 +129,9 @@ async function generateQuestionsWithOpenAI(prompt: string): Promise<z.infer<type
     }
 
     // Handle potential refusal
-    const messageOutput = response.output[0];
-    if (messageOutput.type !== 'message') {
-      throw new Error('Unexpected output type from OpenAI');
+    const messageOutput = response.output.find(item => item.type === 'message');
+    if (!messageOutput) {
+      throw new Error('No message output found in OpenAI response');
     }
 
     const content = messageOutput.content[0];

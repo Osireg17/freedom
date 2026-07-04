@@ -1,5 +1,78 @@
 # AceYourHireVue: Comprehensive Documentation
 
+---
+
+## Local Development
+
+Four things need to run simultaneously. Open four terminals.
+
+### Prerequisites
+
+- `encore` CLI installed
+- `ngrok` installed and authenticated
+- `DB_PASSWORD` and `BUCKET_SECRET_ACCESS_KEY` env vars available (Railway credentials)
+
+### Terminal 1 — Encore backend
+
+```bash
+cd backend/ace-backend
+ENCORE_INFRA_CONFIG=infra.config.json \
+  DB_PASSWORD=<railway_db_password> \
+  BUCKET_SECRET_ACCESS_KEY=<railway_bucket_secret> \
+  encore run
+```
+
+Runs on **<http://localhost:4000>**. Dev dashboard at **<http://localhost:9400>**.
+
+### Terminal 2 — ngrok tunnel
+
+Clerk webhooks can't reach localhost directly. ngrok creates a public URL that forwards to the Encore backend.
+
+First-time only — add your authtoken (from <https://dashboard.ngrok.com/authtokens>):
+
+```bash
+ngrok config add-authtoken <your-token>
+```
+
+Then start the named tunnel defined in `ngrok.yml`:
+
+```bash
+ngrok start --config ~/.config/ngrok/ngrok.yml --config ./ngrok.yml encore-backend
+```
+
+This forwards your static ngrok domain → `http://localhost:4000`.
+
+The Clerk webhook endpoint is set once in the [Clerk Dashboard → Webhooks](https://dashboard.clerk.com) and never needs updating:
+
+```text
+https://<your-static-ngrok-domain>/webhooks/clerk
+```
+
+### Terminal 3 — Next.js frontend
+
+```bash
+npm run dev
+```
+
+Runs on **<http://localhost:3000>**.
+
+### First-time setup: seed your user
+
+If your user exists in Clerk but not in the database (e.g. after a DB reset or fresh Railway environment), insert yourself manually:
+
+```bash
+cd backend/ace-backend && encore db shell aceyourhirevue
+```
+
+```sql
+INSERT INTO users (id, first_name, last_name, email, username, subscription_tier, created_at, updated_at)
+VALUES ('your_clerk_user_id', 'First', 'Last', 'you@example.com', 'username', 'free', NOW(), NOW());
+```
+
+Your Clerk user ID is in the URL when you view your user in the Clerk dashboard, or in the browser console after sign-in.
+
+---
+
 This document compiles the information from the provided sources to offer a detailed overview of the AceYourHireVue platform.
 
 ## 1. Introduction and Vision

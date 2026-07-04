@@ -11,7 +11,8 @@ import { getOrResearchCompanyProfile } from '@/lib/analysis/company-research';
 
 // Configure Trigger.dev
 configure({
-  secretKey: process.env.TRIGGER_SECRET_KEY,
+  // this is the default and if the `TRIGGER_SECRET_KEY` environment variable is set, can omit calling configure
+  secretKey: process.env["TRIGGER_SECRET_KEY"],
 });
 
 // Configure AWS S3 Client for Railway Bucket
@@ -86,21 +87,34 @@ export const recordInterviewTask = schemaTask({
     // Initialize Deepgram with v3 SDK
     const deepgram = createDeepgramClient(process.env.NEXT_PUBLIC_DEEPGRAM_API_KEY as string);
 
-    const command = new GetObjectCommand({
-      Bucket: BUCKET_NAME,
-      Key: payload.audioPath,
-    });
+    let nodeBuffer: Buffer;
+    const isLocalDev = !process.env.TRIGGER_SECRET_KEY?.startsWith('tr_prod');
 
-    const s3Response = await s3Client.send(command);
-    if (!s3Response.Body) {
-      throw new Error('Empty body returned from S3');
+    if (isLocalDev) {
+      logger.info('Local development mode: downloading file from local Encore responses API', { audioPath: payload.audioPath });
+      const res = await fetch(`http://localhost:4000/internal/responses/file/${encodeURIComponent(payload.audioPath)}`);
+      if (!res.ok) {
+        throw new Error(`Failed to download from local Encore: status ${res.status}`);
+      }
+      const arrayBuffer = await res.arrayBuffer();
+      nodeBuffer = Buffer.from(arrayBuffer);
+    } else {
+      const command = new GetObjectCommand({
+        Bucket: BUCKET_NAME,
+        Key: payload.audioPath,
+      });
+
+      const s3Response = await s3Client.send(command);
+      if (!s3Response.Body) {
+        throw new Error('Empty body returned from S3');
+      }
+
+      const audioBytes = await s3Response.Body.transformToByteArray();
+      nodeBuffer = Buffer.from(audioBytes);
     }
 
-    const audioBytes = await s3Response.Body.transformToByteArray();
-    const nodeBuffer = Buffer.from(audioBytes);
-
     if (nodeBuffer.length === 0) {
-      throw new Error('Empty buffer returned from S3');
+      throw new Error('Empty buffer returned from storage');
     }
 
     logger.info('Audio downloaded for transcription', { audioPath: payload.audioPath });
@@ -297,23 +311,41 @@ export const recordInterviewTask = schemaTask({
       overallScore,
     });
 
-    try {
-      const deleteCommand = new DeleteObjectCommand({
-        Bucket: BUCKET_NAME,
-        Key: payload.audioPath,
-      });
+    if (isLocalDev) {
+      logger.info('Local development mode: deleting file from local Encore responses API', { audioPath: payload.audioPath });
+      try {
+        const res = await fetch(`http://localhost:4000/internal/responses/file/${encodeURIComponent(payload.audioPath)}`, {
+          method: 'DELETE'
+        });
+        if (!res.ok) {
+          throw new Error(`Failed to delete from local Encore: status ${res.status}`);
+        }
+        logger.info('Audio file deleted successfully from local Encore', {
+          responseId: payload.responseId,
+          audioPath: payload.audioPath,
+        });
+      } catch (error) {
+        logger.error('Failed to delete raw response file from local Encore during task cleanup', { error });
+      }
+    } else {
+      try {
+        const deleteCommand = new DeleteObjectCommand({
+          Bucket: BUCKET_NAME,
+          Key: payload.audioPath,
+        });
 
-      await s3Client.send(deleteCommand);
-      logger.info('Audio file deleted successfully', {
-        responseId: payload.responseId,
-        audioPath: payload.audioPath,
-      });
-    } catch (error) {
-      logger.error('Failed to delete audio file from S3', {
-        error,
-        responseId: payload.responseId,
-        audioPath: payload.audioPath,
-      });
+        await s3Client.send(deleteCommand);
+        logger.info('Audio file deleted successfully from S3', {
+          responseId: payload.responseId,
+          audioPath: payload.audioPath,
+        });
+      } catch (error) {
+        logger.error('Failed to delete audio file from S3', {
+          error,
+          responseId: payload.responseId,
+          audioPath: payload.audioPath,
+        });
+      }
     }
 
     logger.info('Interview recording process completed successfully', {

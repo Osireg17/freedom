@@ -97,6 +97,34 @@ class MockMediaStream {
 }
 ; (global as any).MediaStream = (global as any).MediaStream || MockMediaStream
 
+// Mock XMLHttpRequest
+const mockXhrSend = jest.fn();
+const mockXhrOpen = jest.fn();
+const mockXhrSetRequestHeader = jest.fn();
+
+const mockXhr = {
+    open: mockXhrOpen,
+    send: mockXhrSend,
+    setRequestHeader: mockXhrSetRequestHeader,
+    upload: {
+        onprogress: null as any
+    },
+    onload: null as any,
+    onerror: null as any,
+    onabort: null as any,
+    status: 200,
+    responseText: JSON.stringify({ success: true })
+};
+
+(global as any).XMLHttpRequest = jest.fn().mockImplementation(() => {
+    mockXhrSend.mockImplementation(() => {
+        if (mockXhr.onload) {
+            mockXhr.onload();
+        }
+    });
+    return mockXhr;
+});
+
 Object.defineProperty(global.navigator, 'mediaDevices', {
     writable: true,
     value: {
@@ -407,10 +435,9 @@ describe('Device Setup Modal Integration', () => {
     })
 
     test('submits raw binary video response successfully', async () => {
-        mockGetResponseApi.mockResolvedValue({
-            ok: true,
-            json: () => Promise.resolve({ success: true }),
-        });
+        mockXhrSend.mockClear();
+        mockXhrOpen.mockClear();
+        mockXhrSetRequestHeader.mockClear();
 
         await driveToReview();
 
@@ -419,18 +446,11 @@ describe('Device Setup Modal Integration', () => {
             fireEvent.click(submitBtn);
         });
 
-        expect(mockGetResponseApi).toHaveBeenCalledWith(
+        expect(mockXhrOpen).toHaveBeenCalledWith(
             'POST',
-            'int1',
-            'q1',
-            expect.any(Blob),
-            expect.objectContaining({
-                query: expect.objectContaining({
-                    responseTimeMs: expect.any(String),
-                    redoAttemptNumber: '0',
-                }),
-            })
+            expect.stringContaining('/interviews/int1/questions/q1/response')
         );
+        expect(mockXhrSend).toHaveBeenCalledWith(expect.any(Blob));
 
         await waitFor(() => {
             expect(toastSuccess).toHaveBeenCalledWith('Response submitted!');

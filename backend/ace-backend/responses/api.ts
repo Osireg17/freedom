@@ -6,7 +6,7 @@ import { createUserResponse } from "./Manager/ResponseManager";
 import { IncomingMessage, ServerResponse } from "http";
 
 export const getResponseApi = api.raw(
-    { expose: true, method: "POST", path: "/interviews/:interviewId/questions/:questionId/response", auth: true },
+    { expose: true, method: "POST", path: "/interviews/:interviewId/questions/:questionId/response", auth: true, bodyLimit: null },
     async (req: IncomingMessage, resp: ServerResponse) => {
         const authData = getAuthData();
         if (!authData || !authData.userID) {
@@ -45,18 +45,26 @@ export const getResponseApi = api.raw(
         }
 
         // Read raw request body into a Buffer with streaming size verification
-        const chunks: Buffer[] = [];
-        let totalBytes = 0;
-        for await (const chunk of req) {
-            totalBytes += chunk.length;
-            if (totalBytes > MAX_SIZE_BYTES) {
-                resp.writeHead(413, { "Content-Type": "application/json" });
-                resp.end(JSON.stringify({ error: { message: "Payload too large" } }));
-                return;
+        let bodyBuffer: Buffer;
+        try {
+            const chunks: Buffer[] = [];
+            let totalBytes = 0;
+            for await (const chunk of req) {
+                totalBytes += chunk.length;
+                if (totalBytes > MAX_SIZE_BYTES) {
+                    resp.writeHead(413, { "Content-Type": "application/json" });
+                    resp.end(JSON.stringify({ error: { message: "Payload too large" } }));
+                    return;
+                }
+                chunks.push(chunk as Buffer);
             }
-            chunks.push(chunk as Buffer);
+            bodyBuffer = Buffer.concat(chunks as any);
+        } catch (readErr: any) {
+            log.error(`Failed to read raw request body stream: ${readErr.message}`, { stack: readErr.stack });
+            resp.writeHead(400, { "Content-Type": "application/json" });
+            resp.end(JSON.stringify({ error: { message: `Failed to read request body: ${readErr.message}` } }));
+            return;
         }
-        const bodyBuffer = Buffer.concat(chunks as any);
 
         try {
             const result = await createUserResponse({
@@ -74,6 +82,56 @@ export const getResponseApi = api.raw(
             const statusCode = err.status || 500;
             resp.writeHead(statusCode, { "Content-Type": "application/json" });
             resp.end(JSON.stringify({ error: { message: err.message || "Internal server error" } }));
+        }
+    }
+);
+
+import { responsesBucket } from "../db/db";
+
+export const getResponseFileApi = api.raw(
+    { expose: true, method: "GET", path: "/internal/responses/file/*filePath" },
+    async (req: IncomingMessage, resp: ServerResponse) => {
+        const url = req.url || "";
+        const parsedUrl = new URL(url, "http://localhost");
+        const match = parsedUrl.pathname.match(/\/internal\/responses\/file\/(.+)$/);
+        if (!match) {
+            resp.writeHead(400);
+            resp.end("Invalid path");
+            return;
+        }
+        const filePath = decodeURIComponent(match[1]);
+
+        try {
+            const fileBuffer = await responsesBucket.download(filePath);
+            resp.writeHead(200, { "Content-Type": "application/octet-stream" });
+            resp.end(fileBuffer);
+        } catch (err: any) {
+            resp.writeHead(404);
+            resp.end(`File not found: ${err.message}`);
+        }
+    }
+);
+
+export const deleteResponseFileApi = api.raw(
+    { expose: true, method: "DELETE", path: "/internal/responses/file/*filePath" },
+    async (req: IncomingMessage, resp: ServerResponse) => {
+        const url = req.url || "";
+        const parsedUrl = new URL(url, "http://localhost");
+        const match = parsedUrl.pathname.match(/\/internal\/responses\/file\/(.+)$/);
+        if (!match) {
+            resp.writeHead(400);
+            resp.end("Invalid path");
+            return;
+        }
+        const filePath = decodeURIComponent(match[1]);
+
+        try {
+            await responsesBucket.remove(filePath);
+            resp.writeHead(200);
+            resp.end("Deleted");
+        } catch (err: any) {
+            resp.writeHead(500);
+            resp.end(`Failed to delete: ${err.message}`);
         }
     }
 );
