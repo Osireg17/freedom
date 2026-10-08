@@ -96,7 +96,7 @@ export const generateJobInterviewQuestionsJob = schemaTask({
 async function generateQuestionsWithOpenAI(prompt: string): Promise<z.infer<typeof InterviewQuestionsResponseSchema>> {
   try {
     const response = await openai.responses.parse({
-      model: "gpt-5.4-nano",
+      model: "gpt-6-luna",
       input: [
         {
           role: "system",
