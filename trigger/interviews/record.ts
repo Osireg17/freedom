@@ -50,28 +50,6 @@ const RecordInterviewPayloadSchema = z.object({
   audioPath: z.string(),
 });
 
-/**
- * Processes an interview recording: downloads the raw video/audio file from the S3-compatible Railway bucket,
- * transcribes it using Deepgram, performs AI evaluation on STAR, communication, culture, and job alignment metrics,
- * writes the transcription and scores to the database, and deletes the raw file from bucket storage.
- *
- * Preconditions:
- * - The interview response record must exist in the database.
- * - The raw video/audio file must exist in the Railway bucket.
- *
- * Constraints:
- * - audioPath must be a valid path pointing to the object in the bucket.
- *
- * Side effects:
- * - Downloads the audio file from S3.
- * - Updates the database record with the transcript, evaluation, and score metrics.
- * - Deletes the raw audio file from the S3 bucket to clean up storage.
- *
- * Signals:
- * - S3 download failure -> Error
- * - Transcription failure -> Error
- * - Analysis tasks failures -> Error
- */
 export const recordInterviewTask = schemaTask({
   id: 'record-interview-task',
   maxDuration: 300, // 5 minutes maximum duration
